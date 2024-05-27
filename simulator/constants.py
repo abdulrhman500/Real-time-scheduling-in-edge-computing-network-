@@ -67,6 +67,9 @@ server_prototypes = [
         "name": "Standard Edge Server",
         "comp_capacity": 15e9,  # 15 GHz
         "energy_per_cycle": 1.5e-9,
+        "uplink_bandwidth":15, #bits Per sec
+        "downlink_bandwidth":15 #bits Per sec
+        
         
     },
     {
@@ -75,6 +78,8 @@ server_prototypes = [
         "name": "High-Performance Edge Server",
         "comp_capacity": 30e9,  # 30 GHz
         "energy_per_cycle": 1e-9,  # More efficient energy consumption
+        "uplink_bandwidth":15, #bits Per sec
+        "downlink_bandwidth":15 #bits Per sec
         
     }
 ]

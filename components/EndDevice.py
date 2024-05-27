@@ -26,12 +26,12 @@ class EndDevice:
     def compute_energy_per_bit(self):
         return self.cycle_per_bit * self.energy_per_cycle  # Energy per bit computation
 
-    def generate_task(self, task_generation_prob, task_size_min, task_size_max):
+    def generate_task(self,id, task_generation_prob, task_size_min, task_size_max):
         
         if random.random() <= task_generation_prob and self.max_waiting_tasks>len(self.task_queue):  # Bernoulli trial
             task_size = random.randint(task_size_min, task_size_max)  # Uniform distribution
             deadline = random.randint(1, 100)
-            return Task(task_size ,Simulation.global_clock+deadline, Simulation.global_clock) 
+            return Task(task_size ,Simulation.global_clock+deadline, Simulation.global_clock,id) 
         else:
             return None
         

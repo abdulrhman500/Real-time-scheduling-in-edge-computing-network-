@@ -6,6 +6,7 @@ from components.Task import Task
 import networkGenerator
 from typing import List
 import TaskGenerator
+from  algorithms.scheduling.scheduler import Scheduler
 class Simulation:
     global_ck = 0  
 
@@ -16,6 +17,7 @@ class Simulation:
         self.total_tasks = total_tasks
         self.current_generated_tasks = 0
         self.current_completed_tasks = 0
+        self.offloaded_tasks=[]
         # self.gateways = gateways
         # self.devices = devices
    
@@ -46,7 +48,13 @@ class Simulation:
     def run_till_time(self,num_iterations):
         for _ in range(num_iterations):
             self.task_generator.generate_tasks(task_generation_prob=0.1, task_size_min=10, task_size_max=1000)
-            self.offload_tasks()
+            offloaded = self.offload_tasks()
+            self.offloaded_tasks.append(offloaded)
+            #apply the MCF- algorithm
+            Scheduler.apply(self.offloaded_tasks)
+            
+
+            
             self.global_clock += 1
         # self.global_clock += 1
 
