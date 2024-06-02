@@ -8,3 +8,11 @@ class Gateway:
         self.available_channels = set(range(num_channels))
         self.channel_bandwidths = channel_bandwidths
         self.location=location
+
+    def __str__(self):
+        return (f"Gateway ID: {self.id}\n"
+                f"Number of Channels: {self.num_channels}\n"
+                f"Available Channels: {self.available_channels}\n"
+                f"Channel Bandwidths: {self.channel_bandwidths}\n"
+                f"Location: {self.location}\n"
+        )

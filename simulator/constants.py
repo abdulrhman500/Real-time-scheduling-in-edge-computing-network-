@@ -59,27 +59,72 @@ gateway_prototypes = [
 
 
 
-server_prototypes = [
+# server_prototypes = [
     
+#     {
+#         "type": "midserver",
+#         "version": 1,
+#         "name": "Standard Edge Server",
+#         "freq": 15e9,  # 15 GHz
+#         "energy_per_cycle": 1.5e-9,
+#         "uplink_bandwidth":15, #bits Per sec
+#         "downlink_bandwidth":15 #bits Per sec
+        
+        
+#     },
+#     {
+#         "type": "highserver",
+#         "version": 1,
+#         "name": "High-Performance Edge Server",
+#         "freq": 30e9,  # 30 GHz
+#         "energy_per_cycle": 1e-9,  # More efficient energy consumption
+#         "uplink_bandwidth":15, #bits Per sec
+#         "downlink_bandwidth":15 #bits Per sec
+        
+#     }
+# ]
+
+server_prototypes = [
     {
-        "type": "midserver",
-        "version": 1,
-        "name": "Standard Edge Server",
-        "comp_capacity": 15e9,  # 15 GHz
-        "energy_per_cycle": 1.5e-9,
-        "uplink_bandwidth":15, #bits Per sec
-        "downlink_bandwidth":15 #bits Per sec
-        
-        
+        "server_id": 1,
+        "gateway": "Gateway High",
+        "freq": 3.2e9,  # 3.2 GHz
+        "TDP": 125,  # 125 Watts
+        "IPC": 1.5,  # 1.5 Instructions per cycle
+        "uplink_bandwidth": 2e9,  # 2 Gbps
+        "downlink_bandwidth": 2e9,  # 2 Gbps
+        "uplink_cost": 0.005,  # $0.005 per bit
+        "downlink_cost": 0.005,  # $0.005 per bit
+        "instruction_size": 64,  # 64-bit instructions
+        "num_cores": 32,  # 32 cores
+        "energy_unit_price": 0.07  # $0.07 per unit of energy
     },
     {
-        "type": "highserver",
-        "version": 1,
-        "name": "High-Performance Edge Server",
-        "comp_capacity": 30e9,  # 30 GHz
-        "energy_per_cycle": 1e-9,  # More efficient energy consumption
-        "uplink_bandwidth":15, #bits Per sec
-        "downlink_bandwidth":15 #bits Per sec
-        
+        "server_id": 2,
+        "gateway": "Gateway Standard",
+        "freq": 2.5e9,  # 2.5 GHz
+        "TDP": 85,  # 85 Watts
+        "IPC": 1.2,  # 1.2 Instructions per cycle
+        "uplink_bandwidth": 1e9,  # 1 Gbps
+        "downlink_bandwidth": 1e9,  # 1 Gbps
+        "uplink_cost": 0.01,  # $0.01 per bit
+        "downlink_cost": 0.01,  # $0.01 per bit
+        "instruction_size": 64,  # 64-bit instructions
+        "num_cores": 16,  # 16 cores
+        "energy_unit_price": 0.10  # $0.10 per unit of energy
+    },
+    {
+        "server_id": 3,
+        "gateway": "Gateway Real-Time",
+        "freq": 2.2e9,  # 2.2 GHz
+        "TDP": 95,  # 95 Watts
+        "IPC": 1.0,  # 1.0 Instructions per cycle
+        "uplink_bandwidth": 800e6,  # 800 Mbps
+        "downlink_bandwidth": 800e6,  # 800 Mbps
+        "uplink_cost": 0.015,  # $0.015 per bit
+        "downlink_cost": 0.015,  # $0.015 per bit
+        "instruction_size": 64,  # 64-bit instructions
+        "num_cores": 8,  # 8 cores
+        "energy_unit_price": 0.12  # $0.12 per unit of energy
     }
 ]

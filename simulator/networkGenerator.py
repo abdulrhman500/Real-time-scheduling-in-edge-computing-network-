@@ -3,18 +3,24 @@ import matplotlib.pyplot as plt
 import random
 from components.EndDevice import EndDevice
 from components.Gateway import Gateway
-from simulator.constants import device_prototypes, standard_gateway
+from components.Server import Server
+
+from simulator.constants import device_prototypes, standard_gateway,server_prototypes
 
 class NetworkGenerator:
-    def __init__(self, lambda_p=0.1, lambda_c=100, sigma=0.1, area_size=15):
+    def __init__(self, lambda_p=0.1, lambda_c=100, sigma=0.1, area_size=15,num_clusters=None,num_devices=None):
         self.lambda_p = lambda_p
         self.lambda_c = lambda_c
         self.sigma = sigma
         self.area_size = area_size
         self.devices = []
         self.gateways = []
+        self.servers=[]
         self.curr_device_id = 0
         self.curr_gateway_id = 0
+        self.num_clusters = num_clusters or np.random.poisson(self.lambda_p * self.area_size**2)
+        self.num_devices =num_devices or  np.random.poisson(self.lambda_c)
+        
 
     # def generate_tasks(self, task_generation_prob=0.3, task_size_min=1, task_size_max=1000):
     #     count_generated_task = 0
@@ -27,28 +33,39 @@ class NetworkGenerator:
 
     def generate_pcp_network(self):
         """Generates a network using a Poisson Cluster Process (PCP)."""
-        num_clusters = np.random.poisson(self.lambda_p * self.area_size**2)
-        cluster_centers = np.random.uniform(0, self.area_size, (num_clusters, 2))
+        cluster_centers = np.random.uniform(0, self.area_size, (self.num_clusters, 2))
 
         for center in cluster_centers:
             gateway = self.create_gateway(center.tolist(), standard_gateway)
+            server = self.create_random_server(gateway)
             self.gateways.append(gateway)
-            self.generate_devices_for_gateway(gateway, center.tolist())
+            self.generate_devices_for_gateway(gateway,server, center.tolist())
+            # print(f"len of num_devices {self.num_devices}")
 
-    def generate_devices_for_gateway(self, gateway, center):
+    def generate_devices_for_gateway(self, gateway,server, center):
         """Generates devices around a gateway."""
-        num_devices = np.random.poisson(self.lambda_c)
-        device_locations = center + self.sigma * np.random.randn(num_devices, 2)
+        # num_devices = np.random.poisson(self.lambda_c)
+        device_locations = center + self.sigma * np.random.randn(self.num_devices, 2)
 
         for location in device_locations:
-            device = self.create_random_device(location.tolist(), gateway)
+            device = self.create_random_device(location.tolist(), gateway,server)
+            # print(f"new device for gatewat: {gateway}\n")
             self.devices.append(device)
 
-    def create_random_device(self, location, gateway):
+    def create_random_server(self,gateway):
+        random_index = random.randrange(len(device_prototypes)-1)
+        selected_prototype = server_prototypes[random_index]
+        new_server = Server(self.curr_device_id,gateway,selected_prototype["freq"],selected_prototype["TDP"],selected_prototype["IPC"],selected_prototype["uplink_bandwidth"],selected_prototype["downlink_bandwidth"],selected_prototype["uplink_cost"],selected_prototype["downlink_cost"],selected_prototype["instruction_size"],selected_prototype["num_cores"],selected_prototype["energy_unit_price"])
+        # print(f"server {new_server} \n")
+        self.servers.append(new_server)
+        self.curr_device_id+=1
+        return new_server
+
+    def create_random_device(self, location, gateway,server):
         """Creates a new EndDevice object with random properties based on prototypes."""
-        random_index = random.randrange(len(device_prototypes))
+        random_index = random.randrange(len(device_prototypes)-1)
         selected_prototype = device_prototypes[random_index]
-        new_device = EndDevice(self.curr_device_id, gateway, location, selected_prototype["comp_capacity"],selected_prototype["energy_per_cycle"],selected_prototype["cycle_per_bit"],selected_prototype["max_waiting_tasks"]) 
+        new_device = EndDevice(self.curr_device_id, gateway, location, selected_prototype["comp_capacity"],selected_prototype["energy_per_cycle"],selected_prototype["cycle_per_bit"],selected_prototype["max_waiting_tasks"],server) 
         self.curr_device_id+=1
         return new_device
 
@@ -60,7 +77,7 @@ class NetworkGenerator:
 
     def visualize_network(self):
         """Plots the generated network."""
-        print("vv")
+        # print("vv")
         print(self.devices)
         print(self.gateways)
         for device in self.devices:

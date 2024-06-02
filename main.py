@@ -1,10 +1,12 @@
 from simulator.networkGenerator import NetworkGenerator
 from simulator.Simulation import Simulation
-network  = NetworkGenerator()
+from simulator.TaskGenerator import TaskGenerator
+from simulator.algorithms.serverSelection import ServerSelection
+network  = NetworkGenerator(num_clusters=10,num_devices=15)
+Task_Generator = TaskGenerator(network.devices,network.gateways)
+Server_Selection = ServerSelection(network.servers)
 
-# network.generate_pcp_network()
-# network.visualize_network()
 
-simulation_instance = Simulation(100,network.gateways,network.devices,network)
-
-# simulation_instance.run()
+simulation_instance = Simulation(100,network,Task_Generator,Server_Selection)
+simulation_instance.init_network()
+simulation_instance.run()
