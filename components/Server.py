@@ -59,12 +59,11 @@ class Server:
         reverse_tasks = []
         for task in tasks:
             reverse_tasks.append(task)
-        reverse_tasks.sort(key=lambda t: self.processing_time(t))
+        reverse_tasks.sort(key=lambda t: t.deadline)
         scheduled_tasks = []
         while reverse_tasks:
             next_task = reverse_tasks.pop(0)
-            current_time = next_task.deadline
-            task_end_time = current_time
+            task_end_time = next_task.deadline
             task_start_time = task_end_time - self.processing_time(next_task)
             next_task.starting_time = task_start_time
             next_task.end_time = task_end_time
