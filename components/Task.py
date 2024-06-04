@@ -13,9 +13,10 @@ class Task:
         self.default_server = default_server
         self.execution_server = server       
         self.channel_gain = channel_gain  
-        
+        self.cost = 0
         self.id = id
         self.flow = 0
+        self.end_time = deadline
         #TODO this should be estimated using a function that takes task size and give estimated number num_instruction_to_be_executed
         self.num_instruction_to_be_executed = num_instruction_to_be_executed or self.compute_number_of_instruction()
 
