@@ -4,7 +4,12 @@ import matplotlib.pyplot as plt
 from collections import deque
 from typing import List
 from abc import ABC, abstractmethod
+
+import json
+import os
 # Task Class
+# import matplotlib.pyplot as plt
+# import numpy as np
 class Task:
     def __init__(self, size:int, deadline, starting_time=None, arrival_time=None, server=None, channel_gain=None, id=None, num_instruction_to_be_executed=None, default_server=None):
         self.size = size
@@ -12,7 +17,7 @@ class Task:
         self.starting_time = starting_time
         self.arrival_time = arrival_time
         self.default_server = default_server
-        self.execution_server = server
+        self.execution_server = server or default_server
         self.channel_gain = channel_gain
         self.id = id
         self.flow = 0
@@ -67,6 +72,7 @@ class EndDevice:
             return Task(task_size,  deadline, id=id, arrival_time=arrival_time, default_server=self.server)
         else:
             return None
+        
     def __str__(self):
         return (f"Device ID: {self.id}\n"
                 f"Gateway: {self.gateway}\n"
@@ -403,6 +409,8 @@ class ProposedTaskGenerator(TaskGeneratorInterface):
         generated_tasks = []
         while len(generated_tasks)<tasks_num:
             for device in self.devices:
+                
+                
                 task = device.generate_task(self.next_available_id, task_generation_prob, 
                                             task_size_min, task_size_max, max_time)
                 
@@ -411,6 +419,8 @@ class ProposedTaskGenerator(TaskGeneratorInterface):
                     self.next_available_id += 1
                     device.task_queue.append(task)
                     count_generated_task += 1
+                    if len(generated_tasks)>=tasks_num : break
+                    
         
         return count_generated_task, generated_tasks
 
@@ -509,7 +519,7 @@ class ASCO_Scheduler:
     
     def __init__(self,simulation_instance):
         self.gateways = simulation_instance.gateways
-        self.servers = simulation_instance.severs
+        self.servers = simulation_instance.servers
         self.simulation_instance= simulation_instance
 
     def calculate_normalized_flow(self,task):
@@ -582,7 +592,7 @@ class ASCO_Scheduler:
         # number of scheduled tasks 
         removed_tasks = []
         for server in self.servers:
-            removed_tasks.append(server.preempted_tasks)
+            removed_tasks.extend(server.preempted_tasks)
         return {
             "received_tasks":total_tasks_num,
             "pruned_flows":removed_flows_count,
@@ -620,7 +630,7 @@ class ASCO_Scheduler:
             return scheduled_tasks
 
 
-    def SRTF(self, start_time, end_time, new_task,server):
+    def SRTF(self, start_time, end_time, new_task,server): #o(tasks)
         shortest_task = None
         for task in server.server_tasks:
             task_end_time = task.starting_time + server.processing_time(task)
@@ -659,7 +669,7 @@ class ASCO_Scheduler:
                 server_flow[flow.default_server.id].append(flow)
 
         # Iterate through each server
-        for server in self.simulation_instance.severs:
+        for server in self.simulation_instance.servers:
             curr_flows = server_flow.get(server.id)
             if not curr_flows:
                 continue
@@ -692,13 +702,17 @@ class ASCO_Scheduler:
 
 
 
+from typing import List
+
 class Baseline_Scheduler:
-    def __init__(self,simulation_instance):
+    def __init__(self, simulation_instance):
         self.gateways = simulation_instance.gateways
-        self.servers = simulation_instance.severs
-        self.simulation_instance= simulation_instance
+        self.servers = simulation_instance.servers
+        self.simulation_instance = simulation_instance
+
 
     def schedule_for_computation(self, tasks: List[Task]):
+        # print(f" the Tasks: {tasks}")
         server_task = {server.id: [] for server in self.servers}
 
         for task in tasks:
@@ -706,83 +720,60 @@ class Baseline_Scheduler:
 
         for server_id, tasks in server_task.items():
             server = next(server for server in self.servers if server.id == server_id)
-            self.schedule(tasks,server)
+            self.schedule(tasks, server)
 
-    def EDF(self,new_task:Task, start,end,server:Server):
-        earliest_deadline = float('inf')
-        selected_tasks = []
-        selected_tasks.append(new_task)
+    def EDF(self, new_task: Task, start: int, end: int, server: Server):
+        selected_tasks = [new_task]
+        overlap_duration = 0
+
         for task in server.server_tasks:
             if task.end_time > start and task.starting_time < end:
                 overlap_start = max(start, task.starting_time)
                 overlap_end = min(end, task.end_time)
                 overlap_duration = overlap_end - overlap_start
-            if overlap_duration > 0:
-                selected_tasks.append(task)
+                if overlap_duration > 0:
+                    selected_tasks.append(task)
 
         selected_tasks.sort(key=lambda t: t.deadline)
-        if selected_tasks[len(selected_tasks)-1] == new_task:
+
+        if selected_tasks[-1] == new_task:
             return None
         else:
-            return selected_tasks[len(selected_tasks)-1]
+            return selected_tasks[-1]
 
-        # if selected_task is not None:
-        #     if end < selected_task.deadline:
-        #         selected_task.starting_time = start
-        #         selected_task.end_time = end
-        #         server.preempted_tasks.append(selected_task)
-        #         server.server_tasks.remove(selected_task)
-        #         server.server_tasks.append(new_task)
-        #         task.starting_time = start
-        #         task.end_time = end
-                    
-        
-                    
+    def schedule(self, tasks: List[Task], server: Server):
+        tasks.sort(key=lambda t: t.arrival_time)
 
-        
-    def schedule(self, tasks:List[Task], server:Server):
-        temp_task = []
-        for task in tasks:
-            temp_task.append(task)
-
-        temp_task.sort(key = lambda t:t.arrival_time)
-        
         for task in tasks:
             start_time = task.arrival_time
-            end_time = server.processing_cost(task)
+            end_time = start_time + server.processing_cost(task)
 
-            if server.remaining_comp_capacity(start_time,end_time)>=server.IPS:
-                task.starting_time=start_time
-                task.end_time=end_time
+            if server.remaining_comp_capacity(start_time, end_time) >= server.IPS:
+                task.starting_time = start_time
+                task.end_time = end_time
                 server.server_tasks.append(task)
-
             else:
-                preempted_task = self.EDF(task,start_time,end_time,server)
+                preempted_task = self.EDF(task, start_time, end_time, server)
                 if preempted_task:
-                    task.starting_time=start_time
-                    task.end_time=end_time
+                    task.starting_time = start_time
+                    task.end_time = end_time
                     server.server_tasks.append(task)
                     server.preempted_tasks.append(preempted_task)
                     server.server_tasks.remove(preempted_task)
 
-                    
-                
-
-
-    def apply(self,tasks):
-        total_tasks_num = len(tasks)
-
-      
+    def apply(self, tasks: List[Task]):
         self.schedule_for_computation(tasks)
-
-        # number of scheduled tasks 
+        
+        total_tasks_num = len(tasks)
+        # print(f"{self.servers}")
         removed_tasks = []
         for server in self.servers:
-            removed_tasks.append(server.preempted_tasks)
+            removed_tasks.extend(server.preempted_tasks)
+
         return {
-            "received_tasks":total_tasks_num,
-            "preempted_tasks":sum(len(server.preempted_tasks) for server in self.servers),
-            "removed_tasks":removed_tasks
+            "received_tasks": total_tasks_num,
+            "preempted_tasks": sum(len(server.preempted_tasks) for server in self.servers),
+            "removed_tasks": removed_tasks
         }
         
 
@@ -790,123 +781,219 @@ class Baseline_Scheduler:
 class Simulation:
     global_clock = 0  
 
-    def __init__(self,  total_tasks: int,network_generator:NetworkGenerator,task_generator:TaskGeneratorInterface,server_Selector:ServerSelectionInterface):
-
+    def __init__(self, network_generator: NetworkGenerator, task_generator: TaskGeneratorInterface, server_selector: ServerSelectionInterface):
         self.network_generator = network_generator
         self.task_generator = task_generator
-        self.total_tasks = total_tasks
         self.current_generated_tasks = 0
         self.current_completed_tasks = 0
-        self.offloaded_tasks=[]
-        self.server_Selector = server_Selector
+        self.offloaded_tasks = []
+        self.server_selector = server_selector
         self.gateways = self.network_generator.gateways
         self.devices = self.network_generator.devices
-        self.severs = self.network_generator.servers
-        
-   
+        self.servers = self.network_generator.servers
    
     def init_network(self):
         self.network_generator.generate_pcp_network()
-        # self.network_generator.visualize_network()
 
-    
+    def paper_algo(self, generated_tasks):
         
-    def paper_algo(self,num):
-        count_generated_task, generated_tasks =  self.task_generator.generate_tasks(None,num,task_generation_prob=1, task_size_min=10, task_size_max=1000)
         output_data = ASCO_Scheduler(simulation_instance=self).apply(generated_tasks)
-        # return {
-        #     "received_tasks":total_tasks_num,
-        #     "pruned_flows":removed_flows_count,
-        #     "preempted_tasks":sum(len(server.preempted_tasks) for server in self.servers),
-        #     "removed_tasks":removed_tasks
-        # }
-        total_cost = sum(task for task in generated_tasks)
-        removed_cost = sum(task for task in output_data["removed_tasks"])
-
-        avg_cost_per_task =(total_cost-removed_cost)/len(output_data["removed_tasks"])
-        output_data["avg_cost_per_task"]= avg_cost_per_task
+        total_cost = sum(task.size for task in generated_tasks)
+        removed_cost = sum(task.size for server_tasks in output_data["removed_tasks"] for task in server_tasks)
+        avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
+        output_data["avg_cost_per_task"] = avg_cost_per_task
+        print(f"the output of the paper algo {output_data}")
         return output_data
 
-    def baseline_algo(self,num):
-        count_generated_task, generated_tasks =  self.task_generator.generate_tasks(None,num,task_generation_prob=1, task_size_min=10, task_size_max=1000)
+    def baseline_algo(self, generated_tasks):
+        
         output_data = Baseline_Scheduler(simulation_instance=self).apply(generated_tasks)
-        # return {
-        #     "received_tasks":total_tasks_num,
-        #     "pruned_flows":removed_flows_count,
-        #     "preempted_tasks":sum(len(server.preempted_tasks) for server in self.servers),
-        #     "removed_tasks":removed_tasks
-        # }
-        total_cost = sum(task for task in generated_tasks)
-        removed_cost = sum(task for task in output_data["removed_tasks"])
-
-        avg_cost_per_task =(total_cost-removed_cost)/len(output_data["removed_tasks"])
-        output_data["avg_cost_per_task"]= avg_cost_per_task
+        total_cost = sum(task.size for task in generated_tasks)
+        removed_cost = sum(task.size for server_tasks in output_data["removed_tasks"] for task in server_tasks)
+        avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
+        output_data["avg_cost_per_task"] = avg_cost_per_task
+        print(f"the output of the base algo {output_data}")
         return output_data
 
-
-    def run(self,num,mode):
-
+    def run(self, mode,tasks=None):
         self.gateways = self.network_generator.gateways
         self.devices = self.network_generator.devices
-        self.severs = self.network_generator.servers
+        self.servers = self.network_generator.servers
 
-        
-
-
-        if mode ==1:
-            self.paper_algo(num)
+        if mode == 1:
+            return self.paper_algo(tasks)
         else:
-            self.baseline_algo(num)
+            return self.baseline_algo(tasks)
 
-        print(f"Gateway: { len(self.gateways)}\nDevices : {len(self.devices)}\n servers : {len(self.severs)}")
+        # print(f"Gateway: {len(self.gateways)}\nDevices: {len(self.devices)}\nServers: {len(self.servers)}")
         
-    def run_tasks(self,num_tasks):
-        done_tasks =0 
-        total_generated_tasks = 0 
-        while(total_generated_tasks<=num_tasks):
-            if(total_generated_tasks<num_tasks):
-                count_generated_task, generated_tasks =  self.task_generator.generate_tasks(None,task_generation_prob=1, task_size_min=10, task_size_max=1000)
-                total_generated_tasks+=len(generated_tasks)
-                print(total_generated_tasks)
-                ASCO_Scheduler(simulation_instance=self).apply(generated_tasks )
-                self.global_clock += 1
+    # def run_tasks(self, num_tasks):
+    #     total_generated_tasks = 0
+    #     while total_generated_tasks <= num_tasks:
+    #         count_generated_task, generated_tasks = self.task_generator.generate_tasks(None, task_generation_prob=1, task_size_min=10, task_size_max=1000)
+    #         total_generated_tasks += len(generated_tasks)
+    #         ASCO_Scheduler(simulation_instance=self).apply(generated_tasks)
+    #         self.global_clock += 1
+
+    # def run_time(self, time):
+    #     for i in range(time):
+    #         count_generated_task, generated_tasks = self.task_generator.generate_tasks(time, task_generation_prob=0.1, task_size_min=10, task_size_max=1000)
+    #         ASCO_Scheduler(simulation_instance=self).apply(generated_tasks)
+    #         self.global_clock += 1
+    #         print(i)
+
+    # def offload_tasks(self, generated_tasks):
+    #     return generated_tasks
 
 
-    def run_time(self,time):
-        for i in range(time):
-            count_generated_task, generated_tasks = self.task_generator.generate_tasks(time,task_generation_prob=0.1, task_size_min=10, task_size_max=1000)
-            ASCO_Scheduler(simulation_instance=self).apply(generated_tasks )
-            self.global_clock += 1
-            print(i)
-
-    def offload_tasks(self,generated_tasks):
-            # print(f"genratd tasks at this time  {len(generated_tasks)}")
-            return generated_tasks
-           
+import matplotlib.pyplot as plt
+import numpy as np
 
 
+
+# def main():
+        
+#     tasks_small_num = [0.5,1.0,1.5,2.0,2.5,3.0]
+#     tasks_big_num = [2,4,6,8,12]
+   
+#     run_simulation(tasks_small_num,20)
+#     run_simulation(tasks_big_num,20)
+    
+#     run_simulation(tasks_small_num,100)
+#     run_simulation(tasks_big_num,100)
+    
+    
+
+
+
+def run_simulation(tasks_num,network):
+    
+    task_generator = ProposedTaskGenerator(network.devices, network.gateways)
+    server_selector = ProposedServerSelection(network.servers)
+    simulation = Simulation(network, task_generator, server_selector)
+    tasks_results = {}
+    for i in tasks_num: # o (n) 
+        # print(f"{i} lg\n")
+        _, generated_tasks = task_generator.generate_tasks(None, int(i * 1000), task_generation_prob=1, task_size_min=10, task_size_max=1000)
+        # print(len(generated_tasks)," TTTTTTTT\n")
+        paper_output = simulation.run(1,generated_tasks)
+        paper_admission = (paper_output['received_tasks'] - paper_output['preempted_tasks']) / paper_output['received_tasks']
+        paper_cost = paper_output['avg_cost_per_task']
+        paper_results= (paper_admission, paper_cost)
+        
+        
+        base_output = simulation.run(2,generated_tasks)
+        base_admission = (base_output['received_tasks'] - base_output['preempted_tasks']) / base_output['received_tasks']
+        base_cost = base_output['avg_cost_per_task']
+        base_results= (base_admission, base_cost)
+        # print(f"{base_output} ddddd.  ")
+
+        tasks_results[i] = {"paper": paper_results, "baseline": base_results}
+    
+    return tasks_results    
+
+    # visualize_results(paper_output, base_output)
+    
+def visualize_results(tasks_results_map, title,output_dir):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    
+    # Task Admission Rate
+    ax1.set_title('Task Admission Rate')
+    ax1.set_xlabel('Number of tasks (K)')
+    ax1.set_ylabel('Ratio to baseline')
+    
+    # Average Per-Task Cost
+    ax2.set_title('Average Per-Task Cost')
+    ax2.set_xlabel('Number of tasks (K)')
+    ax2.set_ylabel('Ratio to baseline')
+    
+    positions = np.arange(len(tasks_results_map))
+    width = 0.4
+    
+    admission_ratios = []
+    cost_ratios = []
+    print("888 \n")
+    print(f"{tasks_results_map}")
+    for i, tasks_num in enumerate(tasks_results_map):
+        print(f"{i} {tasks_num}")
+        paper_results = tasks_results_map[tasks_num]["paper"]
+        base_results = tasks_results_map[tasks_num]["baseline"]
+        
+        paper_admissions, paper_avg_cost = paper_results
+        base_admissions, base_avg_cost =base_results
+        
+        admission_ratios.append((paper_admissions/ base_admissions))
+        cost_ratios.append(paper_avg_cost/ base_avg_cost)
+        
+        ax1.boxplot(admission_ratios, positions=[i], widths=width)
+        ax2.boxplot(cost_ratios, positions=[i], widths=width)
+    
+    ax1.set_xticks(positions)
+    ax1.set_xticklabels(tasks_results_map.keys())
+    ax2.set_xticks(positions)
+    ax2.set_xticklabels(tasks_results_map.keys())
+    
+    plt.tight_layout()
+    plt.suptitle(title)
+    # plt.show()
+
+    graph_filename = os.path.join(output_dir, f"{title.replace(' ', '_')}.png")
+    plt.savefig(graph_filename)
+    plt.close()  # Close the plot to free up memory
+
+
+def save_data_to_file(data, filename):
+    """Save data to a JSON file."""
+    with open(filename, 'w') as f:
+        # json_data = {k: {
+        #     "paper": [(p[0], p[1]) for p in v["paper"]],
+        #     "baseline": [(b[0], b[1]) for b in v["baseline"]]
+        # } for k, v in data.items()}
+        json.dump(data, f, indent=4)
+
+def load_data_from_file(filename):
+    """Load data from a JSON file."""
+    with open(filename, 'r') as f:
+        json_data = json.load(f)
+        return {int(k): {
+            "paper": [tuple(p) for p in v["paper"]],
+            "baseline": [tuple(b) for b in v["baseline"]]
+        } for k, v in json_data.items()}
+
+def ensure_directory_exists(directory):
+    """Create directory if it doesn't exist."""
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 
 def main():
-    num_tasks = 10
-    time = 100
+    tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+    tasks_big_num = [2, 4, 6, 8, 12]
 
-        
-    network  = NetworkGenerator(num_clusters=10,num_devices=15)
-    network.generate_pcp_network()
-    Task_Generator = ProposedTaskGenerator(network.devices,network.gateways)
-    Server_Selection = ProposedServerSelection(network.servers)
+    output_dir = "simulation_results"
+    ensure_directory_exists(output_dir)
+    data_dir = os.path.join(output_dir, "data")
+    ensure_directory_exists(data_dir)
+    graphs_dir = os.path.join(output_dir, "graphs")
+    ensure_directory_exists(graphs_dir)
 
 
-    proposed_simulation = Simulation(100,network,Task_Generator,Server_Selection)
-    
-    # baseline_simulation = Simulation(100,network,Task_Generator,Server_Selection)
+    network_small = NetworkGenerator(num_clusters=20, num_devices=15)
+    network_small.generate_pcp_network()
 
-    #outout should be Task addmison rate , avergae cost per task
-    
-    paper = proposed_simulation.run(num_tasks,1)
-    base = proposed_simulation.run(num_tasks,2)
-    
-    #visualize 
+    # Small scale with 20 cloudlets
+    small_scale_results = run_simulation(tasks_small_num,network_small)
+    visualize_results(small_scale_results, "Small scale with 20 cloudlets",graphs_dir)
+    save_data_to_file(small_scale_results, os.path.join(data_dir, "small_scale_results.json"))
+
+
+    network_large = NetworkGenerator(num_clusters=100, num_devices=15)
+    network_large.generate_pcp_network()
+
+    # Large scale with 100 cloudlets
+    large_scale_results = run_simulation(tasks_big_num,network_large)
+    print(f"ffv {large_scale_results}")
+    visualize_results(large_scale_results, "Large scale with 100 cloudlets",graphs_dir)
+    save_data_to_file(large_scale_results, os.path.join(data_dir, "large_scale_results.json"))
 
 main()

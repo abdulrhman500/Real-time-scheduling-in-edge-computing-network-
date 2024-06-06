@@ -35,3 +35,18 @@ class Task:
                 f"Channel Gain: {self.channel_gain}\n"
                 f"num_Instructions: {self.num_instruction_to_be_executed}\n"
         )
+    
+select_server_for_tasks => tasks_size * servers_num + servers_num 
+    
+
+
+
+
+ num_of_sizes * [(size*1000) + [(tasks_size * servers_num + servers_num)+(servers + tasks + servers * (tasks*((tasks )or(tasks))))+tasks+(servers * 1000) ]  ]
+
+
+
+
+
+
+
