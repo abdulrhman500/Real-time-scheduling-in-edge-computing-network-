@@ -62,17 +62,15 @@ class EndDevice:
 
     def generate_task(self, id, task_generation_prob, task_size_min, task_size_max, max_time):
         # from __main__ import Simulation
-        if random.random() <= task_generation_prob and self.max_waiting_tasks > len(self.task_queue):
-            task_size = random.randint(task_size_min, task_size_max)
-            if max_time is None:
-                max_time = 100
-            arrival_time = random.randint( 1,  max_time)
-            deadline = random.randint( arrival_time+1, + arrival_time+max_time)
+       
+        task_size = random.randint(task_size_min, task_size_max)
+        if max_time is None:
+            max_time = 100
+        arrival_time = random.randint( 1,  max_time)
+        deadline = random.randint( arrival_time+1, + arrival_time+max_time)
 
-            return Task(task_size,  deadline, id=id, arrival_time=arrival_time, default_server=self.server)
-        else:
-            return None
-        
+        return Task(task_size,  deadline, id=id, arrival_time=arrival_time, default_server=self.server)
+    
     def __str__(self):
         return (f"Device ID: {self.id}\n"
                 f"Gateway: {self.gateway}\n"
@@ -398,34 +396,42 @@ class TaskGeneratorInterface(ABC):
        pass
 
 class ProposedTaskGenerator(TaskGeneratorInterface):
-    
     def __init__(self, devices: List[EndDevice], gateways: List[Gateway]):
         self.next_available_id = 0
         self.devices = devices
-        self.gateways = gateways  
+        self.gateways = gateways
+        self.generated_tasks = []
 
-    def generate_tasks(self, max_time, tasks_num ,task_generation_prob=1, task_size_min=1, task_size_max=1000):
+    def generate_tasks(self, max_time, tasks_num, task_generation_prob=1, task_size_min=1, task_size_max=1000):
+        # Only generate the additional tasks needed
+        print(f"in generate tasks \n")
+        additional_tasks_needed = tasks_num - len(self.generated_tasks)
+
+        # If no additional tasks are needed, return the existing tasks
+        if additional_tasks_needed <= 0:
+            return len(self.generated_tasks), self.generated_tasks
+
         count_generated_task = 0
-        generated_tasks = []
-        while len(generated_tasks)<tasks_num:
+        while count_generated_task < additional_tasks_needed:
             for device in self.devices:
-                
-                
-                task = device.generate_task(self.next_available_id, task_generation_prob, 
-                                            task_size_min, task_size_max, max_time)
-                
+                if count_generated_task >= additional_tasks_needed:
+                    break
+
+                task = device.generate_task(
+                    self.next_available_id,
+                    task_generation_prob,
+                    task_size_min,
+                    task_size_max,
+                    max_time
+                )
+
                 if task:
-                    generated_tasks.append(task)
+                    self.generated_tasks.append(task)
                     self.next_available_id += 1
                     device.task_queue.append(task)
                     count_generated_task += 1
-                    if len(generated_tasks)>=tasks_num : break
-                    
-        
-        return count_generated_task, generated_tasks
 
-
-
+        return len(self.generated_tasks), self.generated_tasks
 
     
 class ServerSelectionInterface(ABC):
@@ -514,96 +520,126 @@ class ProposedServerSelection(ServerSelectionInterface):
         processing_cost = server.processing_cost(task)
         return transfer_cost + processing_cost
 
+from collections import defaultdict
+from heapq import heappush, heappop
 
 class ASCO_Scheduler:
-    
-    def __init__(self,simulation_instance):
+    def __init__(self, simulation_instance):
         self.gateways = simulation_instance.gateways
         self.servers = simulation_instance.servers
-        self.simulation_instance= simulation_instance
+        self.simulation_instance = simulation_instance
+        self.server_tasks = {server.id: set() for server in self.servers}
+        self.server_dict = {server.id: server for server in self.servers}
+        self.flows = []
 
-    def calculate_normalized_flow(self,task):
-        #assume it is always positive
-        return task.size / min(task.default_server.uplink_bandwidth,task.execution_server.downlink_bandwidth)
-        
-    def normalize_flows(self,tasks):
+    def calculate_normalized_flow(self, task):
+        # Assume it is always positive
+        return task.size / min(task.default_server.uplink_bandwidth, task.execution_server.downlink_bandwidth)
+
+    def normalize_flows(self, tasks):
+        self.flows = []
         for task in tasks:
             if task.execution_server != task.default_server:
                 task.flow = self.calculate_normalized_flow(task)
+                self.flows.append(task)
 
-
-    def calculate_intensity(self,flows, interval):
-        start_time, end_time = interval
-        sum = 0
-        for flow in flows:
-            sum += flow.flow
-
-        return sum/(end_time-start_time)
-
-    def control_admission(self, flows: List[Task]):
+    def control_admission(self, flows):
         removed_flows_count = 0
         while True:
             most_critical_interval, most_critical_server, most_critical_server_flows, most_critical_intensity = self.find_most_critical_interval(flows)
-
-            if most_critical_interval is None:
+            if most_critical_interval is None or most_critical_intensity <= 1:
                 break
-
-            if most_critical_intensity <= 1:
-                break
-
             if self.remove_max_flow_from_interval(most_critical_server_flows):
-                removed_flows_count+=1
-
+                removed_flows_count += 1
         return removed_flows_count
 
-             
-    def remove_max_flow_from_interval(self, flows: List[Task]):
-        max_flow = max(flows, key=lambda flow: flow.normalized_size/(flow.deadline-flow.arrival_time), default=None)
+    def remove_max_flow_from_interval(self, flows):
+        max_flow = max(flows, key=lambda flow: flow.flow / (flow.deadline - flow.arrival_time), default=None)
         if max_flow:
             flows.remove(max_flow)
-            max_flow.execution_server.remove_task(max_flow.id)
+            self.server_tasks[max_flow.execution_server.id].remove(max_flow)
             return True
         return False
 
-
-    def select_server_for_tasks(self,tasks):
+    def select_server_for_tasks(self, tasks):
         ProposedServerSelection(self.servers).select_servers(tasks)
-        
-      
+
 
     def schedule_for_computation(self, tasks: List[Task]):
-        server_task = {server.id: [] for server in self.servers}
+        for server_id, task_set in self.server_tasks.items():
+            self.schedule(task_set, self.server_dict[server_id])
+    # def schedule_for_computation(self, tasks):
+        # for task in tasks:
+            # self.server_tasks[task.execution_server.id].add(task)
 
-        for task in tasks:
-            server_task[task.execution_server.id].append(task)
-
-        for server_id, tasks in server_task.items():
-            server = next(server for server in self.servers if server.id == server_id)
-            self.schedule(tasks,server)
-
-    def apply_ASCO(self,tasks):
+    def apply_ASCO(self, tasks):
         total_tasks_num = len(tasks)
-
         self.select_server_for_tasks(tasks)
         self.schedule_for_computation(tasks)
         self.normalize_flows(tasks)
-        removed_flows_count = self.control_admission(tasks)
+        removed_flows_count = self.control_admission(self.flows)
 
-        # number of scheduled tasks 
+        # Number of scheduled tasks 
         removed_tasks = []
-        for server in self.servers:
-            removed_tasks.extend(server.preempted_tasks)
+        for server_tasks in self.server_tasks.values():
+            removed_tasks.extend(server_tasks)
+
         return {
-            "received_tasks":total_tasks_num,
-            "pruned_flows":removed_flows_count,
-            "preempted_tasks":sum(len(server.preempted_tasks) for server in self.servers),
-            "removed_tasks":removed_tasks
+            "received_tasks": total_tasks_num,
+            "pruned_flows": removed_flows_count,
+            "preempted_tasks": 0,
+            "removed_tasks": removed_tasks
         }
 
-
-
-    def apply(self,tasks:List[Task]):
+    def apply(self, tasks):
         return self.apply_ASCO(tasks)
+
+    def find_most_critical_interval(self, flows):
+        if not flows:
+            return None, None, None, None
+
+        # Map each server to its respective flows
+        server_flow = defaultdict(list)
+        for flow in flows:
+            server_flow[flow.execution_server.id].append(flow)
+
+        most_critical_interval = None
+        most_critical_server = None
+        most_critical_intensity = 0
+
+        # Iterate through each server
+        for server in self.simulation_instance.servers:
+            curr_flows = server_flow[server.id]
+            if not curr_flows:
+                continue
+
+            # Sort flows by arrival time
+            curr_flows.sort(key=lambda flow: flow.arrival_time)
+
+            # Initialize sliding window parameters
+            start_time = curr_flows[0].arrival_time
+            window_sum = 0
+            active_flows = []
+
+            # Sliding window to find the most critical interval
+            for flow in curr_flows:
+                heappush(active_flows, (flow.deadline, flow.flow))
+                window_sum += flow.flow
+                while active_flows and active_flows[0][0] <= flow.arrival_time:
+                    window_sum -= heappop(active_flows)[1]
+                curr_intensity = window_sum / (flow.arrival_time - start_time + 1)
+                if curr_intensity > most_critical_intensity:
+                    most_critical_intensity = curr_intensity
+                    most_critical_interval = (start_time, flow.arrival_time)
+                    most_critical_server = server
+
+        if most_critical_interval is None:
+            return None, None, None, None
+
+        most_critical_server_flows = [flow for flow in flows if flow.execution_server.id == most_critical_server.id]
+        return most_critical_interval, most_critical_server, most_critical_server_flows, most_critical_intensity
+
+
 
     def schedule(self, tasks, server):
         reverse_tasks = []
@@ -649,58 +685,6 @@ class ASCO_Scheduler:
                 new_task.starting_time = start_time
                 return new_task
         return None
-
-
-
-    def find_most_critical_interval(self, flows):
-        if not flows:
-            return None, None, None, None
-
-        # Calculate the max time counter based on the latest deadline
-      
-        most_critical_intensity = 0
-        most_critical_interval = None
-        most_critical_server = None
-
-        # Map each server to its respective flows
-        server_flow = {server.id: [] for server in self.servers}
-        for flow in flows:
-            if flow.default_server.id != flow.execution_server:
-                server_flow[flow.default_server.id].append(flow)
-
-        # Iterate through each server
-        for server in self.simulation_instance.servers:
-            curr_flows = server_flow.get(server.id)
-            if not curr_flows:
-                continue
-
-            # Calculate the max time counter based on the flows assigned to the current server
-           
-            start_time = self.simulation_instance.global_clock
-            end_time =  max(flow.deadline for flow in curr_flows)  
-
-            # Iterate through possible intervals
-            for i in range(end_time - start_time + 1):
-                for j in range(end_time - start_time + 1):
-                    if start_time + i >= end_time - j:
-                        continue
-                    
-                    curr_s = start_time + i
-                    curr_e = end_time - j
-                    curr_intensity = self.calculate_intensity(curr_flows, (curr_s, curr_e))
-
-                    if curr_intensity > most_critical_intensity:
-                        most_critical_intensity = curr_intensity
-                        most_critical_interval = (curr_s, curr_e)
-                        most_critical_server = server
-
-        if most_critical_interval is None:
-            return None, None, None, None
-
-        return most_critical_interval, most_critical_server, server_flow.get(most_critical_server.id, []), most_critical_intensity
-
-
-
 
 from typing import List
 
@@ -796,20 +780,19 @@ class Simulation:
         self.network_generator.generate_pcp_network()
 
     def paper_algo(self, generated_tasks):
-        
         output_data = ASCO_Scheduler(simulation_instance=self).apply(generated_tasks)
         total_cost = sum(task.size for task in generated_tasks)
-        removed_cost = sum(task.size for server_tasks in output_data["removed_tasks"] for task in server_tasks)
+        removed_cost = sum(task.size for task in output_data["removed_tasks"])
         avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
         output_data["avg_cost_per_task"] = avg_cost_per_task
         print(f"the output of the paper algo {output_data}")
         return output_data
-
+    
     def baseline_algo(self, generated_tasks):
         
         output_data = Baseline_Scheduler(simulation_instance=self).apply(generated_tasks)
         total_cost = sum(task.size for task in generated_tasks)
-        removed_cost = sum(task.size for server_tasks in output_data["removed_tasks"] for task in server_tasks)
+        removed_cost = sum(task.size for task in output_data["removed_tasks"])
         avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
         output_data["avg_cost_per_task"] = avg_cost_per_task
         print(f"the output of the base algo {output_data}")
@@ -893,8 +876,49 @@ def run_simulation(tasks_num,network):
     return tasks_results    
 
     # visualize_results(paper_output, base_output)
-    
-def visualize_results(tasks_results_map, title,output_dir):
+def visualize_results(tasks_results_map, title, output_dir):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+    # Task Admission Rate
+    ax1.set_title('Task Admission Rate')
+    ax1.set_xlabel('Number of tasks (K)')
+    ax1.set_ylabel('Ratio to baseline')
+
+    # Average Per-Task Cost
+    ax2.set_title('Average Per-Task Cost')
+    ax2.set_xlabel('Number of tasks (K)')
+    ax2.set_ylabel('Ratio to baseline')
+
+    tasks_num = sorted(tasks_results_map.keys())
+
+    admission_ratios = []
+    cost_ratios = []
+
+    for tasks_num_value in tasks_num:
+        paper_results = tasks_results_map[tasks_num_value]["paper"]
+        base_results = tasks_results_map[tasks_num_value]["baseline"]
+
+        paper_admissions, paper_avg_cost = paper_results
+        base_admissions, base_avg_cost = base_results
+
+        admission_ratios.append(paper_admissions / base_admissions)
+        cost_ratios.append(paper_avg_cost / base_avg_cost)
+
+    ax1.plot(tasks_num, admission_ratios, marker='o')
+    ax2.plot(tasks_num, cost_ratios, marker='o')
+
+    ax1.set_xticks(tasks_num)
+    ax1.set_xticklabels(tasks_num)
+    ax2.set_xticks(tasks_num)
+    ax2.set_xticklabels(tasks_num)
+
+    plt.tight_layout()
+    plt.suptitle(title)
+
+    graph_filename = os.path.join(output_dir, f"{title.replace(' ', '_')}.png")
+    plt.savefig(graph_filename)
+    plt.close()  # Close the plot to free up memory
+def visualize_results1(tasks_results_map, title,output_dir):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
     
     # Task Admission Rate
@@ -965,6 +989,56 @@ def ensure_directory_exists(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
+import os
+
+import matplotlib.pyplot as plt
+import os
+
+def generate_individual_graphs(tasks_results_map, output_dir, scale):
+    print(f"******************************************************* {tasks_results_map}")
+    
+    x_axis = []
+    paper_admission_rates = []
+    paper_avg_costs = []
+    baseline_admission_rates = []
+    baseline_avg_costs = []
+
+    for number_tasks, data in tasks_results_map.items():
+        print(f"*******************************************************{number_tasks} {data}")
+        x_axis.append(number_tasks)
+        
+        paper_admission_rate, paper_avg_cost = data["paper"]
+        baseline_admission_rate, baseline_avg_cost = data["baseline"]
+        
+        paper_admission_rates.append(paper_admission_rate)
+        paper_avg_costs.append(paper_avg_cost)
+        baseline_admission_rates.append(baseline_admission_rate)
+        baseline_avg_costs.append(baseline_avg_cost)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+    # Task Admission Rate
+    ax1.set_title('Task Admission Rate')
+    ax1.set_xlabel('Number of Tasks')
+    ax1.set_ylabel('Admission Rate')
+    ax1.plot(x_axis, paper_admission_rates, marker='o', label='Paper Admission Rate')
+    ax1.plot(x_axis, baseline_admission_rates, marker='x', label='Baseline Admission Rate')
+    ax1.legend()
+
+    # Average Per-Task Cost
+    ax2.set_title('Average Per-Task Cost')
+    ax2.set_xlabel('Number of Tasks')
+    ax2.set_ylabel('Average Cost')
+    ax2.plot(x_axis, paper_avg_costs, marker='o', label='Paper Avg Cost')
+    ax2.plot(x_axis, baseline_avg_costs, marker='x', label='Baseline Avg Cost')
+    ax2.legend()
+
+    plt.tight_layout()
+
+    graph_filename = os.path.join(output_dir, f"{scale}_detailed_graphs.png")
+    plt.savefig(graph_filename)
+    plt.close()  # Close the plot to free up memory
+
 
 def main():
     tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
@@ -977,23 +1051,22 @@ def main():
     graphs_dir = os.path.join(output_dir, "graphs")
     ensure_directory_exists(graphs_dir)
 
-
-    network_small = NetworkGenerator(num_clusters=20, num_devices=15)
+    network_small = NetworkGenerator(num_clusters=20, num_devices=5)
     network_small.generate_pcp_network()
 
     # Small scale with 20 cloudlets
-    small_scale_results = run_simulation(tasks_small_num,network_small)
-    visualize_results(small_scale_results, "Small scale with 20 cloudlets",graphs_dir)
+    small_scale_results = run_simulation(tasks_small_num, network_small)
+    # visualize_results(small_scale_results, "Small scale with 20 cloudlets", graphs_dir)
+    generate_individual_graphs(small_scale_results, graphs_dir, "small_scale")
     save_data_to_file(small_scale_results, os.path.join(data_dir, "small_scale_results.json"))
 
-
-    network_large = NetworkGenerator(num_clusters=100, num_devices=15)
+    network_large = NetworkGenerator(num_clusters=100, num_devices=5)
     network_large.generate_pcp_network()
 
     # Large scale with 100 cloudlets
-    large_scale_results = run_simulation(tasks_big_num,network_large)
-    print(f"ffv {large_scale_results}")
-    visualize_results(large_scale_results, "Large scale with 100 cloudlets",graphs_dir)
+    large_scale_results = run_simulation(tasks_big_num, network_large)
+    # visualize_results(large_scale_results, "Large scale with 100 cloudlets", graphs_dir)
+    generate_individual_graphs(large_scale_results, graphs_dir, "large_scale")
     save_data_to_file(large_scale_results, os.path.join(data_dir, "large_scale_results.json"))
 
 main()
