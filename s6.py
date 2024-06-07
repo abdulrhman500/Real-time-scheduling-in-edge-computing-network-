@@ -34,8 +34,9 @@ class Task:
                 f"Deadline: {self.deadline}\n"
                 f"Arrival Time: {self.arrival_time}\n"
                 f"Starting Time: {self.starting_time}\n"
-                f"Execution Server: {self.execution_server}\n"
+                f"------------------- \n Execution Server: [{self.execution_server}]\n------------------------\n"
                 f"Channel Gain: {self.channel_gain}\n"
+                f"Cost: {self.cost}"
                 f"num_Instructions: {self.num_instruction_to_be_executed}\n")
 
 # EndDevice Class
@@ -405,7 +406,8 @@ class ProposedTaskGenerator(TaskGeneratorInterface):
     def generate_tasks(self, max_time, tasks_num, task_generation_prob=1, task_size_min=1, task_size_max=1000):
         # Only generate the additional tasks needed
         print(f"in generate tasks \n")
-        additional_tasks_needed = tasks_num - len(self.generated_tasks)
+        additional_tasks_needed = tasks_num 
+        # - len(self.generated_tasks)
 
         # If no additional tasks are needed, return the existing tasks
         if additional_tasks_needed <= 0:
@@ -484,8 +486,11 @@ class ProposedServerSelection(ServerSelectionInterface):
         """
         valid_servers = []
         for server in self.servers:
+            
             if self.is_server_valid(task, server):
                 valid_servers.append(server)
+        
+        
         return valid_servers
 
     def is_server_valid(self, task: Task, server: Server) -> bool:
@@ -493,7 +498,11 @@ class ProposedServerSelection(ServerSelectionInterface):
         Check if the given server can execute the task within its deadline.
         """
         # print(f"size in si_server_valid {task}" )
-        transfer_time = task.size / min(server.uplink_bandwidth, server.downlink_bandwidth)
+
+        if task.default_server == server:
+            return False
+        
+        transfer_time = task.size / min(task.default_server.uplink_bandwidth, server.downlink_bandwidth)
         total_time = transfer_time + server.processing_time(task)
         return total_time <= (task.deadline - task.arrival_time)
 
@@ -568,6 +577,7 @@ class ASCO_Scheduler:
     def schedule_for_computation(self, tasks: List[Task]):
         for server_id, task_set in self.server_tasks.items():
             self.schedule(task_set, self.server_dict[server_id])
+
     # def schedule_for_computation(self, tasks):
         # for task in tasks:
             # self.server_tasks[task.execution_server.id].add(task)
@@ -579,7 +589,7 @@ class ASCO_Scheduler:
         self.normalize_flows(tasks)
         removed_flows_count = self.control_admission(self.flows)
 
-        # Number of scheduled tasks 
+        
         removed_tasks = []
         for server_tasks in self.server_tasks.values():
             removed_tasks.extend(server_tasks)
@@ -660,13 +670,158 @@ class ASCO_Scheduler:
             else:
                 preempted_task = self.SRTF(task_start_time,task_end_time,tasks,server)
                 if preempted_task:
+                    server.remove_task(preempted_task.id)
+                    next_task.starting_time = task_start_time
+                    next_task.end_time = task_end_time
                     scheduled_tasks.append(next_task)
+                    server.server_tasks.append(next_task)
+                    next_task.execution_server = server
                     server.preempted_tasks.append(preempted_task)
 
             return scheduled_tasks
 
 
     def SRTF(self, start_time, end_time, new_task,server): #o(tasks)
+        shortest_task = None
+        for task in server.server_tasks:
+            task_end_time = task.starting_time + server.processing_time(task)
+            if task.starting_time < end_time and task_end_time > start_time:
+                overlap_start = max(task.starting_time, start_time)
+                overlap_end = min(task_end_time, end_time)
+                overlap_duration = overlap_end - overlap_start
+                if overlap_duration > 0:
+                    if shortest_task is None or server.processing_time(task) < server.processing_time(shortest_task):
+                        shortest_task = task
+        if shortest_task:
+            already_consumed_time = start_time-shortest_task.starting_time
+            if already_consumed_time <0:
+                already_consumed_time=0
+            remaining_time = server.processing_time(shortest_task) - (already_consumed_time)
+            if server.processing_time(new_task) < remaining_time:
+               
+                return shortest_task
+            
+            return None
+        return None
+
+from typing import List
+
+class ASCO_Scheduler1:
+    
+    def __init__(self,simulation_instance):
+        self.gateways = simulation_instance.gateways
+        self.servers = simulation_instance.servers
+        self.simulation_instance= simulation_instance
+
+    def calculate_normalized_flow(self,task):
+        #assume it is always positive
+        return task.size / min(task.default_server.uplink_bandwidth,task.execution_server.downlink_bandwidth)
+        
+    def normalize_flows(self,tasks):
+        for task in tasks:
+            if task.execution_server != task.default_server:
+                task.flow = self.calculate_normalized_flow(task)
+
+
+    def calculate_intensity(self,flows, interval):
+        start_time, end_time = interval
+        sum = 0
+        for flow in flows:
+            sum += flow.flow
+
+        return sum/(end_time-start_time)
+
+    def control_admission(self, flows: List[Task]):
+        removed_flows_count = 0
+        while True:
+            most_critical_interval, most_critical_server, most_critical_server_flows, most_critical_intensity = self.find_most_critical_interval(flows)
+
+            if most_critical_interval is None:
+                break
+
+            if most_critical_intensity <= 1:
+                break
+
+            if self.remove_max_flow_from_interval(most_critical_server_flows):
+                removed_flows_count+=1
+
+        return removed_flows_count
+
+             
+    def remove_max_flow_from_interval(self, flows: List[Task]):
+        max_flow = max(flows, key=lambda flow: flow.normalized_size/(flow.deadline-flow.arrival_time), default=None)
+        if max_flow:
+            flows.remove(max_flow)
+            max_flow.execution_server.remove_task(max_flow.id)
+            return True
+        return False
+
+
+    def select_server_for_tasks(self,tasks):
+        ProposedServerSelection(self.servers).select_servers(tasks)
+        
+      
+
+    def schedule_for_computation(self, tasks: List[Task]):
+        server_task = {server.id: [] for server in self.servers}
+
+        for task in tasks:
+            server_task[task.execution_server.id].append(task)
+
+        for server_id, tasks in server_task.items():
+            server = next(server for server in self.servers if server.id == server_id)
+            self.schedule(tasks,server)
+
+    def apply_ASCO(self,tasks):
+        total_tasks_num = len(tasks)
+
+        self.select_server_for_tasks(tasks)
+        self.schedule_for_computation(tasks)
+        self.normalize_flows(tasks)
+        removed_flows_count = self.control_admission(tasks)
+
+        # number of scheduled tasks 
+        removed_tasks = []
+        for server in self.servers:
+            removed_tasks.extend(server.preempted_tasks)
+        return {
+            "received_tasks":total_tasks_num,
+            "pruned_flows":removed_flows_count,
+            "preempted_tasks":sum(len(server.preempted_tasks) for server in self.servers),
+            "removed_tasks":removed_tasks
+        }
+
+
+
+    def apply(self,tasks:List[Task]):
+        return self.apply_ASCO(tasks)
+
+    def schedule(self, tasks, server):
+        reverse_tasks = []
+        for task in tasks:
+            reverse_tasks.append(task)
+        reverse_tasks.sort(key=lambda t: t.deadline)
+        scheduled_tasks = []
+        while reverse_tasks:
+            next_task = reverse_tasks.pop(0)
+            task_end_time = next_task.deadline
+            task_start_time = task_end_time - server.processing_time(next_task)
+            if server.remaining_comp_capacity(task_start_time,task_end_time)>=server.IPS:
+                next_task.starting_time = task_start_time
+                next_task.end_time = task_end_time
+                scheduled_tasks.append(next_task)
+                server.server_tasks.append(next_task)
+                next_task.execution_server = server
+            else:
+                preempted_task = self.SRTF(task_start_time,task_end_time,tasks,server)
+                if preempted_task:
+                    scheduled_tasks.append(next_task)
+                    server.preempted_tasks.append(preempted_task)
+
+            return scheduled_tasks
+
+
+    def SRTF(self, start_time, end_time, new_task,server):
         shortest_task = None
         for task in server.server_tasks:
             task_end_time = task.starting_time + server.processing_time(task)
@@ -686,7 +841,149 @@ class ASCO_Scheduler:
                 return new_task
         return None
 
-from typing import List
+
+
+    def find_most_critical_interval(self, flows):
+        if not flows:
+            return None, None, None, None
+
+        # Calculate the max time counter based on the latest deadline
+      
+        most_critical_intensity = 0
+        most_critical_interval = None
+        most_critical_server = None
+
+        # Map each server to its respective flows
+        server_flow = {server.id: [] for server in self.servers}
+        for flow in flows:
+            if flow.default_server.id != flow.execution_server:
+                server_flow[flow.default_server.id].append(flow)
+
+        # Iterate through each server
+        for server in self.simulation_instance.servers:
+            curr_flows = server_flow.get(server.id)
+            if not curr_flows:
+                continue
+
+            # Calculate the max time counter based on the flows assigned to the current server
+           
+            start_time = self.simulation_instance.global_clock
+            end_time =  max(flow.deadline for flow in curr_flows)  
+
+            # Iterate through possible intervals
+            for i in range(end_time - start_time + 1):
+                for j in range(end_time - start_time + 1):
+                    if start_time + i >= end_time - j:
+                        continue
+                    
+                    curr_s = start_time + i
+                    curr_e = end_time - j
+                    curr_intensity = self.calculate_intensity(curr_flows, (curr_s, curr_e))
+
+                    if curr_intensity > most_critical_intensity:
+                        most_critical_intensity = curr_intensity
+                        most_critical_interval = (curr_s, curr_e)
+                        most_critical_server = server
+
+        if most_critical_interval is None:
+            return None, None, None, None
+
+        return most_critical_interval, most_critical_server, server_flow.get(most_critical_server.id, []), most_critical_intensity
+
+class Baseline_Scheduler1:
+    def __init__(self,simulation_instance):
+        self.gateways = simulation_instance.gateways
+        self.servers = simulation_instance.servers
+        self.simulation_instance= simulation_instance
+
+    def schedule_for_computation(self, tasks: List[Task]):
+        server_task = {server.id: [] for server in self.servers}
+
+        for task in tasks:
+            server_task[task.execution_server.id].append(task)
+
+        for server_id, tasks in server_task.items():
+            server = next(server for server in self.servers if server.id == server_id)
+            self.schedule(tasks,server)
+
+    def EDF(self,new_task:Task, start,end,server:Server):
+        earliest_deadline = float('inf')
+        selected_tasks = []
+        selected_tasks.append(new_task)
+        for task in server.server_tasks:
+            if task.end_time > start and task.starting_time < end:
+                overlap_start = max(start, task.starting_time)
+                overlap_end = min(end, task.end_time)
+                overlap_duration = overlap_end - overlap_start
+            if overlap_duration > 0:
+                selected_tasks.append(task)
+
+        selected_tasks.sort(key=lambda t: t.deadline)
+        if selected_tasks[len(selected_tasks)-1] == new_task:
+            return None
+        else:
+            return selected_tasks[len(selected_tasks)-1]
+
+        # if selected_task is not None:
+        #     if end < selected_task.deadline:
+        #         selected_task.starting_time = start
+        #         selected_task.end_time = end
+        #         server.preempted_tasks.append(selected_task)
+        #         server.server_tasks.remove(selected_task)
+        #         server.server_tasks.append(new_task)
+        #         task.starting_time = start
+        #         task.end_time = end
+                    
+        
+                    
+
+        
+    def schedule(self, tasks:List[Task], server:Server):
+        temp_task = []
+        for task in tasks:
+            temp_task.append(task)
+
+        temp_task.sort(key = lambda t:t.arrival_time)
+        
+        for task in tasks:
+            start_time = task.arrival_time
+            end_time = server.processing_cost(task)
+
+            if server.remaining_comp_capacity(start_time,end_time)>=server.IPS:
+                task.starting_time=start_time
+                task.end_time=end_time
+                server.server_tasks.append(task)
+
+            else:
+                preempted_task = self.EDF(task,start_time,end_time,server)
+                if preempted_task:
+                    task.starting_time=start_time
+                    task.end_time=end_time
+                    server.server_tasks.append(task)
+                    server.preempted_tasks.append(preempted_task)
+                    server.server_tasks.remove(preempted_task)
+
+                    
+                
+
+
+    def apply(self,tasks):
+        total_tasks_num = len(tasks)
+
+      
+        self.schedule_for_computation(tasks)
+
+        # number of scheduled tasks 
+        removed_tasks = []
+        for server in self.servers:
+            removed_tasks.extend(server.preempted_tasks)
+        return {
+            "received_tasks":total_tasks_num,
+            "preempted_tasks":sum(len(server.preempted_tasks) for server in self.servers),
+            "removed_tasks":removed_tasks
+        }
+        
+
 
 class Baseline_Scheduler:
     def __init__(self, simulation_instance):
@@ -781,9 +1078,16 @@ class Simulation:
 
     def paper_algo(self, generated_tasks):
         output_data = ASCO_Scheduler(simulation_instance=self).apply(generated_tasks)
-        total_cost = sum(task.size for task in generated_tasks)
-        removed_cost = sum(task.size for task in output_data["removed_tasks"])
-        avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
+        # for task in generated_tasks:
+        #     print(task) 
+        #     print("--"*10)
+        # print(f"the o   {generated_tasks}")
+
+        total_cost = sum(task.cost for task in generated_tasks)
+        removed_cost = sum(task.cost for task in output_data["removed_tasks"])
+        # avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
+        avg_cost_per_task = (total_cost - removed_cost)
+        
         output_data["avg_cost_per_task"] = avg_cost_per_task
         print(f"the output of the paper algo {output_data}")
         return output_data
@@ -791,9 +1095,11 @@ class Simulation:
     def baseline_algo(self, generated_tasks):
         
         output_data = Baseline_Scheduler(simulation_instance=self).apply(generated_tasks)
-        total_cost = sum(task.size for task in generated_tasks)
-        removed_cost = sum(task.size for task in output_data["removed_tasks"])
-        avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
+        total_cost = sum(task.cost for task in generated_tasks)
+        removed_cost = sum(task.cost for task in output_data["removed_tasks"])
+        # avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
+        avg_cost_per_task = (total_cost - removed_cost)
+        
         output_data["avg_cost_per_task"] = avg_cost_per_task
         print(f"the output of the base algo {output_data}")
         return output_data
@@ -986,6 +1292,7 @@ def load_data_from_file(filename):
 
 def ensure_directory_exists(directory):
     """Create directory if it doesn't exist."""
+    
     if not os.path.exists(directory):
         os.makedirs(directory)
 
