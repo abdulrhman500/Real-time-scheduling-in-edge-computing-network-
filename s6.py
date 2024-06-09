@@ -567,7 +567,11 @@ class ASCO_Scheduler:
         if max_flow:
             flows.remove(max_flow)
             self.server_tasks[max_flow.execution_server.id].remove(max_flow)
+            server = self.server_dict[max_flow.execution_server.id]
+            server.server_tasks.remove(max_flow)
+            server.preempted_tasks.append(max_flow)
             return True
+        
         return False
 
     def select_server_for_tasks(self, tasks):
@@ -587,22 +591,32 @@ class ASCO_Scheduler:
         self.select_server_for_tasks(tasks)
         self.schedule_for_computation(tasks)
         self.normalize_flows(tasks)
-        removed_flows_count = self.control_admission(self.flows)
+        removed_flows_count = self.control_admission(tasks)
 
         
         removed_tasks = []
-        for server_tasks in self.server_tasks.values():
-            removed_tasks.extend(server_tasks)
+        for server in self.servers:
+            removed_tasks.extend(server.preempted_tasks)
 
         return {
-            "received_tasks": total_tasks_num,
-            "pruned_flows": removed_flows_count,
-            "preempted_tasks": 0,
-            "removed_tasks": removed_tasks
+            "received_tasks_num": total_tasks_num,
+            "removed_tasks": removed_tasks,
+            "pruned_flows_num": removed_flows_count
         }
 
     def apply(self, tasks):
         return self.apply_ASCO(tasks)
+    def calculate_free_time_interval(flows):
+        start_time = 0
+        end_time = 0
+        for flow in flows:
+            if flow.arrival_time < start_time:
+                start_time = flow.arrival_time
+            if flow.starting_time > end_time:
+                end_time = flow.starting_time    # can be changes to dealine 
+            
+        return start_time , end_time
+    
 
     def find_most_critical_interval(self, flows):
         if not flows:
@@ -623,11 +637,16 @@ class ASCO_Scheduler:
             if not curr_flows:
                 continue
 
+
+
             # Sort flows by arrival time
             curr_flows.sort(key=lambda flow: flow.arrival_time)
 
+
             # Initialize sliding window parameters
-            start_time = curr_flows[0].arrival_time
+            # start_time = 
+            curr_flows[0].arrival_time
+            start_time , end_time = self.calculate_free_time_interval(curr_flows)
             window_sum = 0
             active_flows = []
 
@@ -1050,10 +1069,8 @@ class Baseline_Scheduler:
         removed_tasks = []
         for server in self.servers:
             removed_tasks.extend(server.preempted_tasks)
-
         return {
-            "received_tasks": total_tasks_num,
-            "preempted_tasks": sum(len(server.preempted_tasks) for server in self.servers),
+            "received_tasks_num": total_tasks_num,
             "removed_tasks": removed_tasks
         }
         
@@ -1085,8 +1102,8 @@ class Simulation:
 
         total_cost = sum(task.cost for task in generated_tasks)
         removed_cost = sum(task.cost for task in output_data["removed_tasks"])
-        # avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
-        avg_cost_per_task = (total_cost - removed_cost)
+        avg_cost_per_task = (total_cost - removed_cost) / (len(generated_tasks)-len(output_data["removed_tasks"])) if generated_tasks else 0
+        # avg_cost_per_task = (total_cost - removed_cost)
         
         output_data["avg_cost_per_task"] = avg_cost_per_task
         print(f"the output of the paper algo {output_data}")
@@ -1097,8 +1114,8 @@ class Simulation:
         output_data = Baseline_Scheduler(simulation_instance=self).apply(generated_tasks)
         total_cost = sum(task.cost for task in generated_tasks)
         removed_cost = sum(task.cost for task in output_data["removed_tasks"])
-        # avg_cost_per_task = (total_cost - removed_cost) / len(generated_tasks) if generated_tasks else 0
-        avg_cost_per_task = (total_cost - removed_cost)
+        avg_cost_per_task = (total_cost - removed_cost) /(len(generated_tasks)-len(output_data["removed_tasks"])) if generated_tasks else 0
+        # avg_cost_per_task = (total_cost - removed_cost)
         
         output_data["avg_cost_per_task"] = avg_cost_per_task
         print(f"the output of the base algo {output_data}")
@@ -1166,13 +1183,13 @@ def run_simulation(tasks_num,network):
         _, generated_tasks = task_generator.generate_tasks(None, int(i * 1000), task_generation_prob=1, task_size_min=10, task_size_max=1000)
         # print(len(generated_tasks)," TTTTTTTT\n")
         paper_output = simulation.run(1,generated_tasks)
-        paper_admission = (paper_output['received_tasks'] - paper_output['preempted_tasks']) / paper_output['received_tasks']
+        paper_admission = (paper_output['received_tasks_num'] - len(paper_output['removed_tasks'])) / paper_output['received_tasks_num']
         paper_cost = paper_output['avg_cost_per_task']
         paper_results= (paper_admission, paper_cost)
         
         
         base_output = simulation.run(2,generated_tasks)
-        base_admission = (base_output['received_tasks'] - base_output['preempted_tasks']) / base_output['received_tasks']
+        base_admission = (base_output['received_tasks_num'] - len(base_output['removed_tasks'])) / base_output['received_tasks_num']
         base_cost = base_output['avg_cost_per_task']
         base_results= (base_admission, base_cost)
         # print(f"{base_output} ddddd.  ")
@@ -1281,18 +1298,20 @@ def save_data_to_file(data, filename):
         # } for k, v in data.items()}
         json.dump(data, f, indent=4)
 
-def load_data_from_file(filename):
-    """Load data from a JSON file."""
+def load_data_from_file(filename, convert_to_tuples=False):
+    json_data=0
     with open(filename, 'r') as f:
         json_data = json.load(f)
-        return {int(k): {
-            "paper": [tuple(p) for p in v["paper"]],
-            "baseline": [tuple(b) for b in v["baseline"]]
-        } for k, v in json_data.items()}
+
+    # for k, v in json_data.items():
+    #     print(k,v)
+
+    return json_data    
+        
 
 def ensure_directory_exists(directory):
     """Create directory if it doesn't exist."""
-    
+
     if not os.path.exists(directory):
         os.makedirs(directory)
 
@@ -1348,8 +1367,8 @@ def generate_individual_graphs(tasks_results_map, output_dir, scale):
 
 
 def main():
-    tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
-    tasks_big_num = [2, 4, 6, 8, 12]
+    tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5]
+    tasks_big_num = [2, 4, 6, 8, 12,14]
 
     output_dir = "simulation_results"
     ensure_directory_exists(output_dir)
@@ -1371,9 +1390,32 @@ def main():
     network_large.generate_pcp_network()
 
     # Large scale with 100 cloudlets
-    large_scale_results = run_simulation(tasks_big_num, network_large)
+    # large_scale_results = run_simulation(tasks_big_num, network_large)
     # visualize_results(large_scale_results, "Large scale with 100 cloudlets", graphs_dir)
     generate_individual_graphs(large_scale_results, graphs_dir, "large_scale")
     save_data_to_file(large_scale_results, os.path.join(data_dir, "large_scale_results.json"))
 
+    # large_scale_results= load_data_from_file("F:\Sem8\paper_simulation\simulation_results\data\large_scale_results.json")
+    # small_scale_results= load_data_from_file("F:\Sem8\paper_simulation\simulation_results\data\small_scale_results.json")
+    print_percentages(small_scale_results,"Small_Scale")
+    print_percentages(large_scale_results,"large_Scale")
+    
+
+
+
+   
+
+
+def print_percentages(results,title):
+     print("****************",title,"*****************\n")
+
+     for num, result in results.items():
+        paper_admission , paper_cost = result["paper"]
+        baseline_admission , baseline_cost = result["baseline"]
+        # print(paper_admission , paper_cost)
+        # print(baseline_admission , baseline_cost)
+        admission_rate_improvement =((paper_admission-baseline_admission)/baseline_admission)*100
+        cost_per_task_reduction=((baseline_cost-paper_cost)/baseline_cost)*100
+        print(f"K = {num}\nadmission_rate_improvement: {admission_rate_improvement } %\ncost_per_task_reduction: {cost_per_task_reduction} %")
+        print("\n")
 main()
