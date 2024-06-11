@@ -7,12 +7,8 @@ from abc import ABC, abstractmethod
 import math
 import json
 import os
+import time
 
-from collections import defaultdict
-# from heapq import heappush, heappop
-
-import heapq
-from typing import List
 # Task Class
 # import matplotlib.pyplot as plt
 # import numpy as np
@@ -33,16 +29,7 @@ class Task:
 
     def compute_number_of_instruction(self):
         return random.randint(10, 10000) * self.size
-    
-    def __lt__(self, other):
-        # Compare based on deadline
-        return self.deadline < other.deadline
 
-    def __eq__(self, other):
-        return self.id == other.id
-    def __hash__(self):
-        return hash(self.id)
-    
     def __str__(self):
         return (f"Task_ID: {self.id}\n"
                 f"Size: {self.size}\n"
@@ -256,8 +243,8 @@ class NetworkGenerator:
     def visualize_network(self):
         """Plots the generated network."""
         # print("vv")
-        # print(self.devices)
-        # print(self.gateways)
+        print(self.devices)
+        print(self.gateways)
         for device in self.devices:
             plt.scatter(device.location[0], device.location[1], alpha=0.6, c="blue", label="IoT Devices" if device == self.devices[0] else "")  
         for gateway in self.gateways:
@@ -613,6 +600,9 @@ class ProposedServerSelection(ServerSelectionInterface):
         processing_cost = server.processing_cost(task)
         return transfer_cost + processing_cost
 
+from collections import defaultdict
+from heapq import heappush, heappop
+
 class ASCO_Scheduler:
     def __init__(self, simulation_instance):
         self.gateways = simulation_instance.gateways
@@ -664,12 +654,12 @@ class ASCO_Scheduler:
         for task in tasks:
             self.server_tasks[task.execution_server.id].add(task)
 
-        # print(f"in computation calculation {tasks}" )
+        print(f"in computation calculation {tasks}" )
         scheduled_tasks = []
         for server_id, task_set in self.server_tasks.items():
             print("enter")
             x=self.schedule(task_set, self.server_dict[server_id])
-            # print(x)
+            print(x)
             scheduled_tasks.extend(x)
 
         return scheduled_tasks    
@@ -708,7 +698,7 @@ class ASCO_Scheduler:
             if flow.arrival_time < start_time:
                 start_time = flow.arrival_time
             if flow.starting_time > end_time:
-                end_time = flow.starting_time    # can be changes to  
+                end_time = flow.starting_time    # can be changes to dealine 
             
         return start_time , end_time
     
@@ -831,9 +821,9 @@ class ASCO_Scheduler:
             next_task = reverse_tasks.pop(0)
             task_end_time = next_task.deadline
             task_start_time = task_end_time - server.processing_time(next_task)
-            # print(f"current Task is {next_task}")
+            print(f"current Task is {next_task}")
             if server.remaining_comp_capacity(task_start_time,task_end_time)>=server.IPS:
-                # print("server can handle it")
+                print("server can handle it")
                 next_task.starting_time = task_start_time
                 next_task.end_time = task_end_time
                 scheduled_tasks.append(next_task)
@@ -842,7 +832,7 @@ class ASCO_Scheduler:
             else:
                 print("server can not handle it and trying ...")
                 preempted_task = self.SRTF(task_start_time,task_end_time,next_task,server,tasks)
-                # print("preempted_task" , preempted_task)
+                print("preempted_task" , preempted_task)
                 if preempted_task:
                     server.remove_task(preempted_task.id)
                     next_task.starting_time = task_start_time
@@ -877,328 +867,6 @@ class ASCO_Scheduler:
             
             return None
         return None
-
-# class ASCO_Scheduler:
-#     def __init__(self, simulation_instance):
-#         self.gateways = simulation_instance.gateways
-#         self.servers = simulation_instance.servers
-#         self.simulation_instance = simulation_instance
-#         self.server_tasks = {server.id: set() for server in self.servers}
-#         self.server_dict = {server.id: server for server in self.servers}
-#         self.flows = []
-#         self.task_heap = {server.id: [] for server in self.servers}
-
-#     def calculate_normalized_flow(self, task):
-#         # Assume it is always positive
-#         return task.size / min(task.default_server.uplink_bandwidth, task.execution_server.downlink_bandwidth)
-
-#     def normalize_flows(self, tasks):
-#         self.flows = []
-#         for task in tasks:
-#             if task.execution_server != task.default_server:
-#                 task.flow = self.calculate_normalized_flow(task)
-#                 self.flows.append(task)
-
-#     def control_admission(self, flows):
-#         removed_flows_count = 0
-#         while True:
-#             most_critical_interval, most_critical_server, most_critical_server_flows, most_critical_intensity = self.find_most_critical_interval(flows)
-#             if most_critical_interval is None or most_critical_intensity <= 1:
-#                 break
-#             if self.remove_max_flow_from_interval(most_critical_server_flows,flows):
-#                 removed_flows_count += 1
-#         return removed_flows_count
-
-#     def remove_max_flow_from_interval(self, flows,total_flows):
-#         max_flow = max(flows, key=lambda flow: flow.flow / (flow.deadline - flow.arrival_time), default=None)
-#         if max_flow:
-#             flows.remove(max_flow)
-#             total_flows.remove(max_flow)
-#             self.server_tasks[max_flow.execution_server.id].remove(max_flow)
-#             server = self.server_dict[max_flow.execution_server.id]
-#             server.server_tasks.remove(max_flow)
-#             server.preempted_tasks.append(max_flow)
-#             return True
-        
-#         return False
-
-#     def select_server_for_tasks(self, tasks):
-#         return ProposedServerSelection(self.servers).select_servers(tasks)
-
-
-#     def schedule_for_computation(self, tasks: List[Task]):
-#         for task in tasks:
-#             self.server_tasks[task.execution_server.id].add(task)
-
-#         # print(f"in computation calculation {tasks}" )
-#         scheduled_tasks = []
-#         print("enter")
-#         for server_id, task_set in self.server_tasks.items():
-#             x=self.schedule(task_set, self.server_dict[server_id])
-#             # print(x)
-#             scheduled_tasks.extend(x)
-
-#         return scheduled_tasks    
-
-#     # def schedule_for_computation(self, tasks):
-#         # for task in tasks:
-#             # self.server_tasks[task.execution_server.id].add(task)
-
-#     def apply_ASCO(self, tasks):
-#         total_tasks_num = len(tasks)
-#         scheduled_tasks = self.select_server_for_tasks(tasks)
-#         scheduled_tasks = self.schedule_for_computation(scheduled_tasks)
-#         self.normalize_flows(scheduled_tasks)
-#         removed_flows_count = self.control_admission(scheduled_tasks)
-
-#         processed_tasks_num = len(scheduled_tasks)
-
-#         removed_tasks = [] #from the server scheduling  or admission control  but not from the server selection
-#         for server in self.servers:
-#             removed_tasks.extend(server.preempted_tasks)
-
-#         return {
-#             "received_tasks_num": total_tasks_num,
-#             "removed_tasks": removed_tasks,
-#             "pruned_flows_num": removed_flows_count,
-#             "processed_tasks_num":processed_tasks_num,
-#             "scheduled_tasks":scheduled_tasks
-#         }
-
-#     def apply(self, tasks):
-#         return self.apply_ASCO(tasks)
-#     def calculate_free_time_interval(self, flows):
-#         start_time = 0
-#         end_time = 0
-#         for flow in flows:
-#             if flow.arrival_time < start_time:
-#                 start_time = flow.arrival_time
-#             if flow.starting_time > end_time:
-#                 end_time = flow.starting_time    # can be changes to dealine 
-            
-#         return start_time , end_time
-    
-#     def calculate_intensity(self,flows, interval):
-#         start_time, end_time = interval
-#         sum = 0
-#         for flow in flows:
-#             sum += flow.flow
-
-#         return sum/(end_time-start_time)
-#     def find_most_critical_interval(self, flows):
-#         if not flows:
-#             return None, None, None, None
-
-#         # Calculate the max time counter based on the latest deadline
-      
-#         most_critical_intensity = 0
-#         most_critical_interval = None
-#         most_critical_server = None
-
-#         # Map each server to its respective flows
-#         server_flow = {server.id: [] for server in self.servers}
-#         flows.sort(key = lambda t: t.arrival_time)
-#         for flow in flows:
-#             if flow.default_server.id != flow.execution_server:
-#                 server_flow[flow.default_server.id].append(flow)
-
-#         # Iterate through each server
-#         for server in self.simulation_instance.servers:
-#             curr_flows = server_flow.get(server.id)
-#             if not curr_flows:
-#                 continue
-
-#             # Calculate the max time counter based on the flows assigned to the current server
-           
-#             # start_time = min(flow.deadline for flow in curr_flows)
-#             # end_time =  max(flow.deadline for flow in curr_flows)  
-#             start_time , end_time = self.calculate_free_time_interval(flows)
-#             # print(start_time , end_time,"    55")
-#             # Iterate through possible intervals
-#             for i in range(start_time , end_time + 1):
-#                 curr_s = i
-#                 for j in range(i+1 , end_time + 1):
-#                     if i >=  j:
-#                         continue
-                    
-                    
-#                     curr_e = j
-#                     curr_intensity = self.calculate_intensity(curr_flows, (curr_s, curr_e))
-
-#                     if curr_intensity > most_critical_intensity:
-#                         most_critical_intensity = curr_intensity
-#                         most_critical_interval = (curr_s, curr_e)
-#                         most_critical_server = server
-
-#         if most_critical_interval is None:
-#             return None, None, None, None
-
-#         return most_critical_interval, most_critical_server, server_flow.get(most_critical_server.id, []), most_critical_intensity
-
-
-#     # def find_most_critical_interval(self, flows):
-#     #     if not flows:
-#     #         return None, None, None, None
-
-#     #     # Map each server to its respective flows
-#     #     server_flow = defaultdict(list)
-#     #     for flow in flows:
-#     #         server_flow[flow.execution_server.id].append(flow)
-
-#     #     most_critical_interval = None
-#     #     most_critical_server = None
-#     #     most_critical_intensity = 0
-
-#     #     # Iterate through each server
-#     #     for server in self.simulation_instance.servers:
-#     #         curr_flows = server_flow[server.id]
-#     #         if not curr_flows:
-#     #             continue
-
-
-
-#     #         # Sort flows by arrival time
-#     #         curr_flows.sort(key=lambda flow: flow.arrival_time)
-
-
-#     #         # Initialize sliding window parameters
-#     #         # start_time = 
-#     #         curr_flows[0].arrival_time
-#     #         start_time , end_time = self.calculate_free_time_interval(curr_flows)
-#     #         window_sum = 0
-#     #         active_flows = []
-
-#     #         # Sliding window to find the most critical interval
-#     #         for flow in curr_flows:
-#     #             # heappush(active_flows, (flow.deadline, flow.flow))
-#     #             window_sum += flow.flow
-#     #             curr_intensity = window_sum / (end_time- start_time + 1)
-#     #             if curr_intensity > most_critical_intensity:
-#     #                 most_critical_intensity = curr_intensity
-#     #                 most_critical_interval = (start_time, flow.arrival_time)
-#     #                 most_critical_server = server
-
-#     #     if most_critical_interval is None:
-#     #         return None, None, None, None
-
-#     #     most_critical_server_flows = [flow for flow in flows if flow.execution_server.id == most_critical_server.id]
-#     #     return most_critical_interval, most_critical_server, most_critical_server_flows, most_critical_intensity
-# # old
-# # -------------------------
-# # new
-
-#     def SRTF(self, start_time, end_time, new_task, server, tasks):
-#         if not self.task_heap[server.id]:
-#             return None
-        
-#         shortest_task = heapq.heappop(self.task_heap[server.id])[1]
-#         task_end_time = shortest_task.starting_time + server.processing_time(shortest_task)
-        
-#         if shortest_task.starting_time < end_time and task_end_time > start_time:
-#             overlap_start = max(shortest_task.starting_time, start_time)
-#             overlap_end = min(task_end_time, end_time)
-#             overlap_duration = overlap_end - overlap_start
-            
-#             if overlap_duration > 0:
-#                 already_consumed_time = max(0, start_time - shortest_task.starting_time)
-#                 remaining_time = server.processing_time(shortest_task) - already_consumed_time
-                
-#                 if server.processing_time(new_task) < remaining_time:
-#                     heapq.heappush(self.task_heap[server.id], (server.processing_time(shortest_task), shortest_task))
-#                     return shortest_task
-
-#         heapq.heappush(self.task_heap[server.id], (server.processing_time(shortest_task), shortest_task))
-#         return None
-
-#     def schedule(self, tasks, server):
-#         reverse_tasks = sorted(tasks, key=lambda t: t.deadline)
-#         scheduled_tasks = []
-        
-#         while reverse_tasks:
-#             next_task = reverse_tasks.pop(0)
-#             task_end_time = next_task.deadline
-#             task_start_time = task_end_time - server.processing_time(next_task)
-            
-#             if server.remaining_comp_capacity(task_start_time, task_end_time) >= server.IPS:
-#                 next_task.starting_time = task_start_time
-#                 next_task.end_time = task_end_time
-#                 scheduled_tasks.append(next_task)
-#                 server.server_tasks.append(next_task)
-#                 next_task.execution_server = server
-#                 heapq.heappush(self.task_heap[server.id], (server.processing_time(next_task), next_task))
-#             else:
-#                 preempted_task = self.SRTF(task_start_time, task_end_time, next_task, server, tasks)
-                
-#                 if preempted_task:
-#                     server.remove_task(preempted_task.id)
-#                     next_task.starting_time = task_start_time
-#                     next_task.end_time = task_end_time
-#                     scheduled_tasks.append(next_task)
-#                     server.server_tasks.append(next_task)
-#                     next_task.execution_server = server
-#                     server.preempted_tasks.append(preempted_task)
-#                     heapq.heappush(self.task_heap[server.id], (server.processing_time(next_task), next_task))
-
-#         return scheduled_tasks
-
-
-    # def schedule(self, tasks, server):
-    #     reverse_tasks = []
-    #     for task in tasks:
-    #         reverse_tasks.append(task)
-    #     reverse_tasks.sort(key=lambda t: t.deadline)
-    #     scheduled_tasks = []
-    #     print(f"In scheduling")
-    #     while reverse_tasks:
-    #         next_task = reverse_tasks.pop(0)
-    #         task_end_time = next_task.deadline
-    #         task_start_time = task_end_time - server.processing_time(next_task)
-    #         print(f"current Task is {next_task}")
-    #         if server.remaining_comp_capacity(task_start_time,task_end_time)>=server.IPS:
-    #             print("server can handle it")
-    #             next_task.starting_time = task_start_time
-    #             next_task.end_time = task_end_time
-    #             scheduled_tasks.append(next_task)
-    #             server.server_tasks.append(next_task)
-    #             next_task.execution_server = server
-    #         else:
-    #             print("server can not handle it and trying ...")
-    #             preempted_task = self.SRTF(task_start_time,task_end_time,next_task,server,tasks)
-    #             print("preempted_task" , preempted_task)
-    #             if preempted_task:
-    #                 server.remove_task(preempted_task.id)
-    #                 next_task.starting_time = task_start_time
-    #                 next_task.end_time = task_end_time
-    #                 scheduled_tasks.append(next_task)
-    #                 server.server_tasks.append(next_task)
-    #                 next_task.execution_server = server
-    #                 server.preempted_tasks.append(preempted_task)
-
-    #     return scheduled_tasks
-
-
-    # def SRTF(self, start_time, end_time, new_task,server,tasks): #o(tasks)
-    #     shortest_task = None
-    #     for task in server.server_tasks:
-    #         task_end_time = task.starting_time + server.processing_time(task)
-    #         if task.starting_time < end_time and task_end_time > start_time:
-    #             overlap_start = max(task.starting_time, start_time)
-    #             overlap_end = min(task_end_time, end_time)
-    #             overlap_duration = overlap_end - overlap_start
-    #             if overlap_duration > 0:
-    #                 if shortest_task is None or server.processing_time(task) < server.processing_time(shortest_task):
-    #                     shortest_task = task
-    #     if shortest_task:
-    #         already_consumed_time = start_time-shortest_task.starting_time
-    #         if already_consumed_time <0:
-    #             already_consumed_time=0
-    #         remaining_time = server.processing_time(shortest_task) - (already_consumed_time)
-    #         if server.processing_time(new_task) < remaining_time:
-               
-    #             return shortest_task
-            
-    #         return None
-    #     return None
 
 from typing import List
 
@@ -1737,9 +1405,9 @@ def visualize_results1(tasks_results_map, title,output_dir):
     admission_ratios = []
     cost_ratios = []
     # print("888 \n")
-    # print(f"{tasks_results_map}")
+    print(f"{tasks_results_map}")
     for i, tasks_num in enumerate(tasks_results_map):
-        # print(f"{i} {tasks_num}")
+        print(f"{i} {tasks_num}")
         paper_results = tasks_results_map[tasks_num]["paper"]
         base_results = tasks_results_map[tasks_num]["baseline"]
         
@@ -1798,7 +1466,7 @@ import matplotlib.pyplot as plt
 import os
 
 def generate_individual_graphs(tasks_results_map, output_dir, scale):
-    # print(f"******************************************************* {tasks_results_map}")
+    print(f"******************************************************* {tasks_results_map}")
     
     x_axis = []
     paper_admission_rates = []
@@ -1807,7 +1475,7 @@ def generate_individual_graphs(tasks_results_map, output_dir, scale):
     baseline_avg_costs = []
 
     for number_tasks, data in tasks_results_map.items():
-        print(f"******************************************************* {number_tasks} {data}")
+        print(f"*******************************************************{number_tasks} {data}")
         x_axis.append(number_tasks)
         
         paper_admission_rate, paper_avg_cost = data["paper"]
@@ -1842,14 +1510,11 @@ def generate_individual_graphs(tasks_results_map, output_dir, scale):
     plt.savefig(graph_filename)
     plt.close()  # Close the plot to free up memory
 
-import time
+
 def main():
-    start_execution_time = time.time()
-    
-    print(f"start_execution_time:  {time.ctime(start_execution_time)}")
-    tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0,4.5]
-    tasks_big_num = [2, 4, 6, 8, 12,14,16,18,20]
-    
+    # tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5]
+    # tasks_big_num = [2, 4, 6, 8, 12,14]
+
     output_dir = "simulation_results"
     ensure_directory_exists(output_dir)
     data_dir = os.path.join(output_dir, "data")
@@ -1857,15 +1522,14 @@ def main():
     graphs_dir = os.path.join(output_dir, "graphs")
     ensure_directory_exists(graphs_dir)
 
+    # # network_small = NetworkGenerator(num_clusters=20, num_devices=5)
+    # # network_small.generate_pcp_network()
 
-    network_small = NetworkGenerator(num_clusters=20, num_devices=5)
-    network_small.generate_pcp_network()
-
-    # Small scale with 20 cloudlets
-    # visualize_results(small_scale_results, "Small scale with 20 cloudlets", graphs_dir)
-    # small_scale_results = run_simulation(tasks_small_num, network_small)
-    # generate_individual_graphs(small_scale_results, graphs_dir, "small_scale")
-    # save_data_to_file(small_scale_results, os.path.join(data_dir, "small_scale_results.json"))
+    # # Small scale with 20 cloudlets
+    # # visualize_results(small_scale_results, "Small scale with 20 cloudlets", graphs_dir)
+    # # small_scale_results = run_simulation(tasks_small_num, network_small)
+    # # generate_individual_graphs(small_scale_results, graphs_dir, "small_scale")
+    # # save_data_to_file(small_scale_results, os.path.join(data_dir, "small_scale_results.json"))
 
     # network_large = NetworkGenerator(num_clusters=100, num_devices=5)
     # network_large.generate_pcp_network()
@@ -1878,9 +1542,9 @@ def main():
 
     # # large_scale_results= load_data_from_file("F:\Sem8\paper_simulation\simulation_results\data\large_scale_results.json")
     # # small_scale_results= load_data_from_file("F:\Sem8\paper_simulation\simulation_results\data\small_scale_results.json")
-    # print_percentages(small_scale_results,"Small_Scale")
+    # # print_percentages(small_scale_results,"Small_Scale")
     # print_percentages(large_scale_results,"large_Scale")
-
+    
     # network_small = NetworkGenerator(num_clusters=20, num_devices=5)
     # network_small.generate_pcp_network()
     # network_large = NetworkGenerator(num_clusters=100, num_devices=5)
@@ -1888,19 +1552,20 @@ def main():
 
     list_ =[ 
         # [1,2,3,4,5,6,7,8,9,10,11,12],
-        #     [10,20,30,40,50,60,70,80,90],
-        #     [100,200,300,400,500,600],
-            [2, 4, 6, 8, 12,14,16,18,20],
-            # [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0,4.5]
+            # [10,20,30,40,50,60,70,80,90],
+            # [100,200,300,400,500,600],
+            #[2, 4, 6, 8, 12,14,16,18,20],
+            # [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0,4.5],
+	[0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5],
+	[2, 4, 6, 8, 12,14]
+
             ]
 
     for i in range(0,len(list_)): 
-
         network_small = NetworkGenerator(num_clusters=20, num_devices=5)
         network_small.generate_pcp_network()
         network_large = NetworkGenerator(num_clusters=100, num_devices=5)
         network_large.generate_pcp_network()
-
         small_scale_results = run_simulation(list_[i], network_small)
         generate_individual_graphs(small_scale_results, graphs_dir, str(i)+"small_scale")
         save_data_to_file(small_scale_results, os.path.join(data_dir, str(i)+"small_scale_results.json"))
@@ -1937,4 +1602,22 @@ def print_percentages(results, title, file):
             
             f.write(f"K = {num}\nadmission_rate_improvement: {admission_rate_improvement:.5f} %\ncost_per_task_reduction: {cost_per_task_reduction:.5f} %\n\n")
             print(f"K = {num}\nadmission_rate_improvement: {admission_rate_improvement:.5f} %\ncost_per_task_reduction: {cost_per_task_reduction:.5f} %\n")
+main()
+
+
+   
+
+
+def print_percentages(results,title):
+     print("****************",title,"*****************\n")
+
+     for num, result in results.items():
+        paper_admission , paper_cost = result["paper"]
+        baseline_admission , baseline_cost = result["baseline"]
+        # print(paper_admission , paper_cost)
+        # print(baseline_admission , baseline_cost)
+        admission_rate_improvement =((paper_admission-baseline_admission)/baseline_admission)*100
+        cost_per_task_reduction=((baseline_cost-paper_cost)/baseline_cost)*100
+        print(f"K = {num}\nadmission_rate_improvement: {admission_rate_improvement } %\ncost_per_task_reduction: {cost_per_task_reduction} %")
+        print("\n")
 main()

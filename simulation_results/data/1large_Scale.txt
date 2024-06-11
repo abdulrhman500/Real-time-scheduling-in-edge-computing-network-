@@ -1,0 +1,37 @@
+**************** large_Scale *****************
+K = 10
+admission_rate_improvement: -151.90431 %
+cost_per_task_reduction: -81.06699 %
+
+K = 20
+admission_rate_improvement: -209.42616 %
+cost_per_task_reduction: -171.12928 %
+
+K = 30
+admission_rate_improvement: -227.41326 %
+cost_per_task_reduction: -216.47844 %
+
+K = 40
+admission_rate_improvement: -214.97594 %
+cost_per_task_reduction: -211.26089 %
+
+K = 50
+admission_rate_improvement: -193.26165 %
+cost_per_task_reduction: -162.19327 %
+
+K = 60
+admission_rate_improvement: -170.25078 %
+cost_per_task_reduction: -130.07719 %
+
+K = 70
+admission_rate_improvement: -141.25949 %
+cost_per_task_reduction: -83.45744 %
+
+K = 80
+admission_rate_improvement: -121.58272 %
+cost_per_task_reduction: -60.45113 %
+
+K = 90
+admission_rate_improvement: -113.62928 %
+cost_per_task_reduction: -49.49549 %
+
