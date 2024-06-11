@@ -7,16 +7,14 @@ from abc import ABC, abstractmethod
 import math
 import json
 import os
-
+import numpy as np
 from collections import defaultdict
-# from heapq import heappush, heappop
-
 import heapq
 from typing import List
-# Task Class
-# import matplotlib.pyplot as plt
-# import numpy as np
-max_time_deadline = 10000
+import time
+
+max_time_= None
+max_duration = None
 class Task:
     def __init__(self, size:int, deadline, starting_time=None, arrival_time=None, server=None, channel_gain=None, id=None, num_instruction_to_be_executed=None, default_server=None):
         self.size = size
@@ -54,7 +52,25 @@ class Task:
                 f"Channel Gain: {self.channel_gain}\n"
                 f"Cost: {self.cost}"
                 f"num_Instructions: {self.num_instruction_to_be_executed}\n")
+    def important_details(self):
 
+        return (f"Task_ID: {self.id}\n"
+                f"Size: {self.size}\n"
+                f"Deadline: {self.deadline}\n"
+                f"Arrival Time: {self.arrival_time}\n"
+                f"Starting Time: {self.starting_time}\n"
+                f"Cost: {self.cost}"
+                f"num_Instructions: {self.num_instruction_to_be_executed}\n")
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "task_size": self.size,
+            "arrival_time": self.arrival_time,
+            "starting_time":self.starting_time,
+            "deadline": self.deadline,
+            "cost":self.cost,
+          
+        }
 # EndDevice Class
 class EndDevice:
     def __init__(self, device_id, gateway, location, comp_capacity, energy_per_cycle, cycle_per_bit, max_waiting_tasks, server):
@@ -79,12 +95,13 @@ class EndDevice:
 
     def generate_task(self, id, task_generation_prob, task_size_min, task_size_max, max_time):
         # from __main__ import Simulation
-       
+        global max_time_
+        global max_duration
         task_size = random.randint(task_size_min, task_size_max)
         if max_time is None:
-            max_time = max_time_deadline #2000
-        arrival_time = int(random.randint( 0,  1000))
-        deadline = int(arrival_time+ random.randint( 1, 100))
+            max_time = max_time_ #2000
+        arrival_time = int(random.randint( 0,max_time_))
+        deadline = int(arrival_time+ random.randint( 0, max_duration))+1
 
         return Task(task_size,  deadline, id=id, arrival_time=arrival_time, default_server=self.server)
     
@@ -194,7 +211,13 @@ class Server:
                 f"Number of Cores: {self.num_cores}\n"
                 f"Tasks Running: {self.server_tasks}\n"
                 f"Is Space Shared: {self.is_space_shared}\n")
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "IPC": self.IPC ,
+            "EPI": self.EPI
 
+        }
 # NetworkGenerator Class
 class NetworkGenerator:
     def __init__(self, lambda_p=0.1, lambda_c=100, sigma=0.1, area_size=15, num_clusters=None, num_devices=None):
@@ -275,11 +298,6 @@ device_prototypes = [
     {"type": "sbc", "version": 0, "name": "Single-Board Computer", "comp_capacity": 1.4e9, "energy_per_cycle": 1.1e-9, "cycle_per_bit": 14, "max_waiting_tasks": 5},
     {"type": "wearable", "version": 0, "name": "Wearable Device", "comp_capacity": 1.2e9, "energy_per_cycle": 1.3e-9, "cycle_per_bit": 16, "max_waiting_tasks": 3}
 ]
-#C = B * log₂(1 + SNR)
-# C is the channel capacity (maximum data rate) in bits per second (bps).
-# B is the channel bandwidth in Hertz (Hz).
-# SNR = Signal-to-Noise Ratio
-# The bandwidth of a channel is often directly referred to as its channel width.
 standard_gateway = {
     
         "type": "mobile_base_station",
@@ -327,50 +345,7 @@ gateway_prototypes = [
         "channel_bandwidths": [10, 10, 30, 20, 20, 20, 30, 10, 30, 30]  # MHz
     }
 ]
-
-
-
-# server_prototypes = [
-    
-#     {
-#         "type": "midserver",
-#         "version": 1,
-#         "name": "Standard Edge Server",
-#         "freq": 15e9,  # 15 GHz
-#         "energy_per_cycle": 1.5e-9,
-#         "uplink_bandwidth":15, #bits Per sec
-#         "downlink_bandwidth":15 #bits Per sec
-        
-        
-#     },
-#     {
-#         "type": "highserver",
-#         "version": 1,
-#         "name": "High-Performance Edge Server",
-#         "freq": 30e9,  # 30 GHz
-#         "energy_per_cycle": 1e-9,  # More efficient energy consumption
-#         "uplink_bandwidth":15, #bits Per sec
-#         "downlink_bandwidth":15 #bits Per sec
-        
-#     }
-# ]
-
 server_prototypes = [
-    # {
-    #     #Xeon 5500
-    #     "server_id": 1,
-    #     "gateway": "Gateway High",
-    #     "freq": 3.3e9,  # 3.3 GHz
-    #     "TDP": 125,  # 125 Watts
-    #     "IPC":3,  # 1.5 Instructions per cycle
-    #     "uplink_bandwidth": 2e9,  # 2 Gbps
-    #     "downlink_bandwidth": 2e9,  # 2 Gbps
-    #     "uplink_cost": 0.005,  # $0.005 per bit
-    #     "downlink_cost": 0.005,  # $0.005 per bit
-    #     "instruction_size": 64,  # 64-bit instructions
-    #     "num_cores": 32,  # 32 cores
-    #     "energy_unit_price": 0.07  # $0.07 per unit of energy
-    # },
      {
          # https://www.tomshardware.com/news/amd-launches-threadripper-3990x-and-ryzen-4000-renoir-apus
         "server_id": 2,
@@ -675,10 +650,6 @@ class ASCO_Scheduler:
 
         return scheduled_tasks    
 
-    # def schedule_for_computation(self, tasks):
-        # for task in tasks:
-            # self.server_tasks[task.execution_server.id].add(task)
-
     def apply_ASCO(self, tasks):
         total_tasks_num = len(tasks)
         scheduled_tasks = self.select_server_for_tasks(tasks)
@@ -702,37 +673,33 @@ class ASCO_Scheduler:
 
     def apply(self, tasks):
         return self.apply_ASCO(tasks)
+
+    def calculate_intensity(self, flows, interval):
+        start_time, end_time = interval
+        total_flow = sum(flow.flow for flow in flows if start_time <= flow.arrival_time < end_time)
+        return total_flow / (end_time - start_time)
+
     def calculate_free_time_interval(self, flows):
-        start_time = 0
-        end_time = 0
+        start_time = float('inf')
+        end_time = float('-inf')
         for flow in flows:
             if flow.arrival_time < start_time:
                 start_time = flow.arrival_time
             if flow.starting_time > end_time:
-                end_time = flow.starting_time    # can be changes to  
-            
-        return start_time , end_time
-    
-    def calculate_intensity(self,flows, interval):
-        start_time, end_time = interval
-        sum = 0
-        for flow in flows:
-            sum += flow.flow
+                end_time = flow.starting_time
+        return start_time, end_time
 
-        return sum/(end_time-start_time)
     def find_most_critical_interval(self, flows):
         if not flows:
             return None, None, None, None
 
-        # Calculate the max time counter based on the latest deadline
-      
         most_critical_intensity = 0
         most_critical_interval = None
         most_critical_server = None
 
         # Map each server to its respective flows
         server_flow = {server.id: [] for server in self.servers}
-        flows.sort(key = lambda t: t.arrival_time)
+        flows.sort(key=lambda t: t.arrival_time)  # Sort flows by arrival time
         for flow in flows:
             if flow.default_server.id != flow.execution_server:
                 server_flow[flow.default_server.id].append(flow)
@@ -743,81 +710,34 @@ class ASCO_Scheduler:
             if not curr_flows:
                 continue
 
-            # Calculate the max time counter based on the flows assigned to the current server
-           
-            start_time , end_time = self.calculate_free_time_interval(flows)
-            # print(start_time , end_time,"    55")
-            # Iterate through possible intervals
-            for i in range(start_time , end_time + 1):
-                curr_s = i
-                for j in range(i+1 , end_time + 1):
-                    if i >=  j:
-                        continue
-                    
-                    
-                    curr_e = j
-                    curr_intensity = self.calculate_intensity(curr_flows, (curr_s, curr_e))
+            start_time, end_time = self.calculate_free_time_interval(curr_flows)
+
+            # Prefix sum for flows within the current server
+            prefix_sums = [0] * (end_time - start_time + 1)
+            for flow in curr_flows:
+                arrival_idx = flow.arrival_time - start_time
+                if 0 <= arrival_idx < len(prefix_sums):
+                    prefix_sums[arrival_idx] += flow.flow
+
+            for i in range(1, len(prefix_sums)):
+                prefix_sums[i] += prefix_sums[i - 1]
+
+            # Iterate through possible intervals using prefix sums
+            for i in range(start_time, end_time):
+                for j in range(i + 1, end_time + 1):
+                    interval_flow_sum = prefix_sums[j - start_time - 1] - (prefix_sums[i - start_time - 1] if i > start_time else 0)
+                    interval_length = j - i
+                    curr_intensity = interval_flow_sum / interval_length
 
                     if curr_intensity > most_critical_intensity:
                         most_critical_intensity = curr_intensity
-                        most_critical_interval = (curr_s, curr_e)
+                        most_critical_interval = (i, j)
                         most_critical_server = server
 
         if most_critical_interval is None:
             return None, None, None, None
 
         return most_critical_interval, most_critical_server, server_flow.get(most_critical_server.id, []), most_critical_intensity
-
-
-    # def find_most_critical_interval(self, flows):
-    #     if not flows:
-    #         return None, None, None, None
-
-    #     # Map each server to its respective flows
-    #     server_flow = defaultdict(list)
-    #     for flow in flows:
-    #         server_flow[flow.execution_server.id].append(flow)
-
-    #     most_critical_interval = None
-    #     most_critical_server = None
-    #     most_critical_intensity = 0
-
-    #     # Iterate through each server
-    #     for server in self.simulation_instance.servers:
-    #         curr_flows = server_flow[server.id]
-    #         if not curr_flows:
-    #             continue
-
-
-
-    #         # Sort flows by arrival time
-    #         curr_flows.sort(key=lambda flow: flow.arrival_time)
-
-
-    #         # Initialize sliding window parameters
-    #         # start_time = 
-    #         curr_flows[0].arrival_time
-    #         start_time , end_time = self.calculate_free_time_interval(curr_flows)
-    #         window_sum = 0
-    #         active_flows = []
-
-    #         # Sliding window to find the most critical interval
-    #         for flow in curr_flows:
-    #             # heappush(active_flows, (flow.deadline, flow.flow))
-    #             window_sum += flow.flow
-    #             curr_intensity = window_sum / (end_time- start_time + 1)
-    #             if curr_intensity > most_critical_intensity:
-    #                 most_critical_intensity = curr_intensity
-    #                 most_critical_interval = (start_time, flow.arrival_time)
-    #                 most_critical_server = server
-
-    #     if most_critical_interval is None:
-    #         return None, None, None, None
-
-    #     most_critical_server_flows = [flow for flow in flows if flow.execution_server.id == most_critical_server.id]
-    #     return most_critical_interval, most_critical_server, most_critical_server_flows, most_critical_intensity
-
-
 
     def schedule(self, tasks, server):
         reverse_tasks = []
@@ -984,7 +904,9 @@ class Simulation:
 
         total_cost = sum(task.cost for task in output_data["scheduled_tasks"])
         # removed_cost = sum(task.cost for task in output_data["removed_tasks"])
-        avg_cost_per_task = (total_cost) / (len( output_data["scheduled_tasks"])) 
+        avg_cost_per_task = 0
+        if total_cost != 0:
+            avg_cost_per_task = (total_cost) / (len( output_data["scheduled_tasks"])) 
         # avg_cost_per_task = (total_cost - removed_cost)
         
         output_data["avg_cost_per_task"] = avg_cost_per_task
@@ -1013,27 +935,6 @@ class Simulation:
         else:
             return self.baseline_algo(tasks)
 
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-
-
-# def main():
-        
-#     tasks_small_num = [0.5,1.0,1.5,2.0,2.5,3.0]
-#     tasks_big_num = [2,4,6,8,12]
-   
-#     run_simulation(tasks_small_num,20)
-#     run_simulation(tasks_big_num,20)
-    
-#     run_simulation(tasks_small_num,100)
-#     run_simulation(tasks_big_num,100)
-    
-    
-
-
-
 def run_simulation(tasks_num,network):
     
     task_generator = ProposedTaskGenerator(network.devices, network.gateways)
@@ -1044,6 +945,7 @@ def run_simulation(tasks_num,network):
         # print(f"{i} lg\n")
         _, generated_tasks = task_generator.generate_tasks(None, int(i * 1000), task_generation_prob=1, task_size_min=10, task_size_max=1000)
         # print(len(generated_tasks)," TTTTTTTT\n")
+        paper_gen = generated_tasks
         paper_output = simulation.run(1,generated_tasks)
         paper_admission = (len(paper_output['scheduled_tasks'])) / paper_output['received_tasks_num']
         paper_cost = paper_output['avg_cost_per_task']
@@ -1051,13 +953,17 @@ def run_simulation(tasks_num,network):
         
         _, generated_tasks = task_generator.generate_tasks(None, int(i * 1000), task_generation_prob=1, task_size_min=10, task_size_max=1000)
         base_output = simulation.run(2,generated_tasks)
-        base_admission = (base_output['received_tasks_num'] - len(base_output['removed_tasks'])) / base_output['received_tasks_num']
+        base_admission = (len(paper_output['scheduled_tasks'])) / base_output['received_tasks_num']
         base_cost = base_output['avg_cost_per_task']
         base_results= (base_admission, base_cost)
         # print(f"{base_output} ddddd.  ")
 
-        tasks_results[i] = {"paper": paper_results, "baseline": base_results}
-    
+        tasks_results[i] = {
+        "paper": paper_results, 
+        "baseline": base_results,
+        "paper_tasks": {"generated":paper_gen,"scheduled_tasks":paper_output["scheduled_tasks"]},
+        "baseline_tasks":{"generated":generated_tasks,"scheduled_tasks":base_output["scheduled_tasks"]}
+        }
     return tasks_results    
 
     # visualize_results(paper_output, base_output)
@@ -1109,24 +1015,44 @@ def visualize_results(tasks_results_map, title, output_dir):
     plt.close()  # Close the plot to free up memory
 
 
-def save_data_to_file(data, filename):
+# def save_data_to_file(data, filename):
+#     """Save data to a JSON file."""
+#     with open(filename, 'w') as f:
+#         # json_data = {k: {
+#         #     "paper": [(p[0], p[1]) for p in v["paper"]],
+#         #     "baseline": [(b[0], b[1]) for b in v["baseline"]]
+#         # } for k, v in data.items()}
+#         json.dump(data, f, indent=4)
+
+import json
+
+import json
+from typing import Any
+
+def save_data_to_file(data: dict[str, Any], filename: str):
     """Save data to a JSON file."""
     with open(filename, 'w') as f:
-        # json_data = {k: {
-        #     "paper": [(p[0], p[1]) for p in v["paper"]],
-        #     "baseline": [(b[0], b[1]) for b in v["baseline"]]
-        # } for k, v in data.items()}
-        json.dump(data, f, indent=4)
+        json_data = {
+            k: {
+                "paper": v["paper"],
+                "baseline": v["baseline"],
+                "paper_tasks": {
+                    "generated": [task.to_dict() for task in v["paper_tasks"]["generated"]],
+                    "scheduled_tasks": [task.to_dict() for task in v["paper_tasks"]["scheduled_tasks"]]
+                },
+                "baseline_tasks": {
+                    "generated": [task.to_dict() for task in v["baseline_tasks"]["generated"]],
+                    "scheduled_tasks": [task.to_dict() for task in v["baseline_tasks"]["scheduled_tasks"]]
+                }
+            } for k, v in data.items()
+        }
+        json.dump(json_data, f, indent=4)
 
 def load_data_from_file(filename, convert_to_tuples=False):
-    json_data=0
+    """Load data from a JSON file."""
     with open(filename, 'r') as f:
         json_data = json.load(f)
-
-    # for k, v in json_data.items():
-    #     print(k,v)
-
-    return json_data    
+    return json_data
         
 
 def ensure_directory_exists(directory):
@@ -1150,7 +1076,7 @@ def generate_individual_graphs(tasks_results_map, output_dir, scale):
     baseline_avg_costs = []
 
     for number_tasks, data in tasks_results_map.items():
-        print(f"******************************************************* {number_tasks} {data}")
+        # print(f"******************************************************* {number_tasks} {data}")
         x_axis.append(number_tasks)
         
         paper_admission_rate, paper_avg_cost = data["paper"]
@@ -1185,7 +1111,7 @@ def generate_individual_graphs(tasks_results_map, output_dir, scale):
     plt.savefig(graph_filename)
     plt.close()  # Close the plot to free up memory
 
-import time
+
 def main():
     start_execution_time = time.time()
     
@@ -1193,12 +1119,11 @@ def main():
     tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0]
     tasks_big_num = [2, 4, 6, 8, 12,14,16]
     
-    output_dir = "simulation_results"
-    ensure_directory_exists(output_dir)
-    data_dir = os.path.join(output_dir, "data")
-    ensure_directory_exists(data_dir)
-    graphs_dir = os.path.join(output_dir, "graphs")
-    ensure_directory_exists(graphs_dir)
+    max_time =[60*60] #60*1 = 1 min , 60 is sec number  
+    duration_max=[60*3]
+    
+
+   
     
 
     list_ =[ 
@@ -1207,36 +1132,47 @@ def main():
          [2, 4, 6, 8, 12,14,16]
         
         ]
-    for j in range(3):
-        for i in range(0,len(list_)): 
 
-            network_small = NetworkGenerator(num_clusters=20, num_devices=5)
-            network_small.generate_pcp_network()
-            
-            network_mid = NetworkGenerator(num_clusters=50, num_devices=5)
-            network_mid.generate_pcp_network()
-            
+    for j in range(len(max_time)):
+        for k in range(len(duration_max)):
+            global max_time_
+            global max_duration
 
-            network_large = NetworkGenerator(num_clusters=100, num_devices=5)
-            network_large.generate_pcp_network()
+            max_time_= max_time[j]
+            max_duration = duration_max[k]
 
-            small_scale_results = run_simulation(list_[i], network_small)
-            generate_individual_graphs(small_scale_results, graphs_dir, generate_file_name(i,"Small_Scale",""))
-            save_data_to_file(small_scale_results, os.path.join(data_dir, generate_file_name(i,"Small_Scale","json")))
+            for i in range(0,len(list_)): 
+                output_dir = "simulation_results/"+str(max_time_)+"_"+str(max_duration)
+                ensure_directory_exists(output_dir)
+                data_dir = os.path.join(output_dir, "data")
+                ensure_directory_exists(data_dir)
+                graphs_dir = os.path.join(output_dir, "graphs")
+                ensure_directory_exists(graphs_dir)
 
-            mid_scale_results = run_simulation(list_[i], network_mid)
-            generate_individual_graphs(mid_scale_results, graphs_dir, generate_file_name(i,"mid_Scale",""))
-            save_data_to_file(mid_scale_results, os.path.join(data_dir, generate_file_name(i,"mid_Scale","json")))
+                network_small = NetworkGenerator(num_clusters=20, num_devices=5)
+                network_small.generate_pcp_network()
+                
 
-            large_scale_results = run_simulation(list_[i], network_large)
-            generate_individual_graphs(large_scale_results, graphs_dir,generate_file_name(i,"large_Scale",""))
-            save_data_to_file(large_scale_results, os.path.join(data_dir, generate_file_name(i,"large_Scale","json")))
+                network_large = NetworkGenerator(num_clusters=100, num_devices=5)
+                network_large.generate_pcp_network()
 
-            # generate_file_name(i,"Small_Scale","txt")
+                small_scale_results = run_simulation(list_[i], network_small)
+                generate_individual_graphs(small_scale_results, graphs_dir, generate_file_name(i,"Small_Scale",""))
+                save_data_to_file(small_scale_results, os.path.join(data_dir, generate_file_name(i,"Small_Scale","json")))
 
-            print_percentages(small_scale_results,"Small_Scale", os.path.join(data_dir, generate_file_name(i,"Small_Scale","txt")))
-            print_percentages(large_scale_results,"large_Scale",os.path.join(data_dir, generate_file_name(i,"large_Scale","txt")))
-            print_percentages(mid_scale_results,"mid_Scale",os.path.join(data_dir, generate_file_name(i,"mid_Scale","txt")))
+                
+                print_percentages(small_scale_results,"Small_Scale", os.path.join(data_dir, generate_file_name(i,"Small_Scale","txt")))
+                
+                
+                large_scale_results = run_simulation(list_[i], network_large)
+                generate_individual_graphs(large_scale_results, graphs_dir,generate_file_name(i,"large_Scale",""))
+                save_data_to_file(large_scale_results, os.path.join(data_dir, generate_file_name(i,"large_Scale","json")))
+
+                # generate_file_name(i,"Small_Scale","txt")
+
+             
+                print_percentages(large_scale_results,"large_Scale",os.path.join(data_dir, generate_file_name(i,"large_Scale","txt")))
+                # print_percentages(mid_scale_results,"mid_Scale",os.path.join(data_dir, generate_file_name(i,"mid_Scale","txt")))
 
     
     end_execution_time = time.time()
@@ -1260,8 +1196,9 @@ def print_percentages(results, title, file):
         for num, result in results.items():
             paper_admission, paper_cost = result["paper"]
             baseline_admission, baseline_cost = result["baseline"]
-
-            admission_rate_improvement = ((paper_admission - baseline_admission) / baseline_admission) * 100
+            admission_rate_improvement = 0
+            if baseline_admission != 0:
+                admission_rate_improvement = ((paper_admission - baseline_admission) / baseline_admission) * 100
             cost_per_task_reduction = ((baseline_cost - paper_cost) / baseline_cost) * 100
             
             f.write(f"K = {num}\nadmission_rate_improvement: {admission_rate_improvement:.5f} %\ncost_per_task_reduction: {cost_per_task_reduction:.5f} %\n\n")
