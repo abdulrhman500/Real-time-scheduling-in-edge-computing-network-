@@ -1,0 +1,33 @@
+**************** mid_Scale *****************
+K = 0.5
+admission_rate_improvement: 0.00000 %
+cost_per_task_reduction: 0.00000 %
+
+K = 1.0
+admission_rate_improvement: 0.00000 %
+cost_per_task_reduction: 0.00000 %
+
+K = 1.5
+admission_rate_improvement: 0.20040 %
+cost_per_task_reduction: 0.14958 %
+
+K = 2.0
+admission_rate_improvement: 1.01215 %
+cost_per_task_reduction: 0.19348 %
+
+K = 2.5
+admission_rate_improvement: 2.83451 %
+cost_per_task_reduction: 0.83347 %
+
+K = 3.0
+admission_rate_improvement: 7.32070 %
+cost_per_task_reduction: 2.26002 %
+
+K = 3.5
+admission_rate_improvement: 18.23785 %
+cost_per_task_reduction: 4.96241 %
+
+K = 4.0
+admission_rate_improvement: 46.33849 %
+cost_per_task_reduction: 12.11126 %
+

@@ -1,0 +1,33 @@
+**************** large_Scale *****************
+K = 0.5
+admission_rate_improvement: 0.00000 %
+cost_per_task_reduction: -0.00000 %
+
+K = 1.0
+admission_rate_improvement: 0.00000 %
+cost_per_task_reduction: 0.00000 %
+
+K = 1.5
+admission_rate_improvement: 0.00000 %
+cost_per_task_reduction: 0.00000 %
+
+K = 2.0
+admission_rate_improvement: 0.10010 %
+cost_per_task_reduction: -0.00629 %
+
+K = 2.5
+admission_rate_improvement: 0.48270 %
+cost_per_task_reduction: 0.10479 %
+
+K = 3.0
+admission_rate_improvement: 1.56569 %
+cost_per_task_reduction: 0.57640 %
+
+K = 3.5
+admission_rate_improvement: 3.59066 %
+cost_per_task_reduction: 1.58155 %
+
+K = 4.0
+admission_rate_improvement: 7.60780 %
+cost_per_task_reduction: 3.25265 %
+

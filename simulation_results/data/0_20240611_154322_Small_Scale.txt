@@ -1,0 +1,33 @@
+**************** Small_Scale *****************
+K = 0.5
+admission_rate_improvement: 0.00000 %
+cost_per_task_reduction: -0.00000 %
+
+K = 1.0
+admission_rate_improvement: 0.30090 %
+cost_per_task_reduction: 0.14182 %
+
+K = 1.5
+admission_rate_improvement: 1.43345 %
+cost_per_task_reduction: 0.88336 %
+
+K = 2.0
+admission_rate_improvement: 7.48075 %
+cost_per_task_reduction: 2.04588 %
+
+K = 2.5
+admission_rate_improvement: 17.90662 %
+cost_per_task_reduction: 5.65465 %
+
+K = 3.0
+admission_rate_improvement: 54.28051 %
+cost_per_task_reduction: 15.39949 %
+
+K = 3.5
+admission_rate_improvement: 196.28821 %
+cost_per_task_reduction: 41.58614 %
+
+K = 4.0
+admission_rate_improvement: -3639.02439 %
+cost_per_task_reduction: 108.75915 %
+

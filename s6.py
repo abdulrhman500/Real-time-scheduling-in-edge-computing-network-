@@ -1718,48 +1718,6 @@ def visualize_results(tasks_results_map, title, output_dir):
     graph_filename = os.path.join(output_dir, f"{title.replace(' ', '_')}.png")
     plt.savefig(graph_filename)
     plt.close()  # Close the plot to free up memory
-def visualize_results1(tasks_results_map, title,output_dir):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-    
-    # Task Admission Rate
-    ax1.set_title('Task Admission Rate')
-    ax1.set_xlabel('Number of tasks (K)')
-    ax1.set_ylabel('Ratio to baseline')
-    
-    # Average Per-Task Cost
-    ax2.set_title('Average Per-Task Cost')
-    ax2.set_xlabel('Number of tasks (K)')
-    ax2.set_ylabel('Ratio to baseline')
-    
-    positions = np.arange(len(tasks_results_map))
-    width = 0.4
-    
-    admission_ratios = []
-    cost_ratios = []
-    # print("888 \n")
-    # print(f"{tasks_results_map}")
-    for i, tasks_num in enumerate(tasks_results_map):
-        # print(f"{i} {tasks_num}")
-        paper_results = tasks_results_map[tasks_num]["paper"]
-        base_results = tasks_results_map[tasks_num]["baseline"]
-        
-        paper_admissions, paper_avg_cost = paper_results
-        base_admissions, base_avg_cost =base_results
-        
-        admission_ratios.append((paper_admissions/ base_admissions))
-        cost_ratios.append(paper_avg_cost/ base_avg_cost)
-        
-        ax1.boxplot(admission_ratios, positions=[i], widths=width)
-        ax2.boxplot(cost_ratios, positions=[i], widths=width)
-    
-    ax1.set_xticks(positions)
-    ax1.set_xticklabels(tasks_results_map.keys())
-    ax2.set_xticks(positions)
-    ax2.set_xticklabels(tasks_results_map.keys())
-    
-    plt.tight_layout()
-    plt.suptitle(title)
-    # plt.show()
 
     graph_filename = os.path.join(output_dir, f"{title.replace(' ', '_')}.png")
     plt.savefig(graph_filename)
@@ -1847,8 +1805,8 @@ def main():
     start_execution_time = time.time()
     
     print(f"start_execution_time:  {time.ctime(start_execution_time)}")
-    tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0,4.5]
-    tasks_big_num = [2, 4, 6, 8, 12,14,16,18,20]
+    tasks_small_num = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0]
+    tasks_big_num = [2, 4, 6, 8, 12,14,16]
     
     output_dir = "simulation_results"
     ensure_directory_exists(output_dir)
@@ -1856,62 +1814,44 @@ def main():
     ensure_directory_exists(data_dir)
     graphs_dir = os.path.join(output_dir, "graphs")
     ensure_directory_exists(graphs_dir)
-
-
-    network_small = NetworkGenerator(num_clusters=20, num_devices=5)
-    network_small.generate_pcp_network()
-
-    # Small scale with 20 cloudlets
-    # visualize_results(small_scale_results, "Small scale with 20 cloudlets", graphs_dir)
-    # small_scale_results = run_simulation(tasks_small_num, network_small)
-    # generate_individual_graphs(small_scale_results, graphs_dir, "small_scale")
-    # save_data_to_file(small_scale_results, os.path.join(data_dir, "small_scale_results.json"))
-
-    # network_large = NetworkGenerator(num_clusters=100, num_devices=5)
-    # network_large.generate_pcp_network()
-
-    # # Large scale with 100 cloudlets
-    # large_scale_results = run_simulation(tasks_big_num, network_large)
-    # # visualize_results(large_scale_results, "Large scale with 100 cloudlets", graphs_dir)
-    # generate_individual_graphs(large_scale_results, graphs_dir, "large_scale")
-    # save_data_to_file(large_scale_results, os.path.join(data_dir, "large_scale_results.json"))
-
-    # # large_scale_results= load_data_from_file("F:\Sem8\paper_simulation\simulation_results\data\large_scale_results.json")
-    # # small_scale_results= load_data_from_file("F:\Sem8\paper_simulation\simulation_results\data\small_scale_results.json")
-    # print_percentages(small_scale_results,"Small_Scale")
-    # print_percentages(large_scale_results,"large_Scale")
-
-    # network_small = NetworkGenerator(num_clusters=20, num_devices=5)
-    # network_small.generate_pcp_network()
-    # network_large = NetworkGenerator(num_clusters=100, num_devices=5)
-    # network_large.generate_pcp_network()
+    
 
     list_ =[ 
-        # [1,2,3,4,5,6,7,8,9,10,11,12],
-        #     [10,20,30,40,50,60,70,80,90],
-        #     [100,200,300,400,500,600],
-            [2, 4, 6, 8, 12,14,16,18,20],
-            # [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0,4.5]
-            ]
+      
+         [0.5, 1.0, 1.5, 2.0, 2.5, 3.0,3.5,4.0],
+         [2, 4, 6, 8, 12,14,16]
+        
+        ]
+    for j in range(3):
+        for i in range(0,len(list_)): 
 
-    for i in range(0,len(list_)): 
+            network_small = NetworkGenerator(num_clusters=20, num_devices=5)
+            network_small.generate_pcp_network()
+            
+            network_mid = NetworkGenerator(num_clusters=50, num_devices=5)
+            network_mid.generate_pcp_network()
+            
 
-        network_small = NetworkGenerator(num_clusters=20, num_devices=5)
-        network_small.generate_pcp_network()
-        network_large = NetworkGenerator(num_clusters=100, num_devices=5)
-        network_large.generate_pcp_network()
+            network_large = NetworkGenerator(num_clusters=100, num_devices=5)
+            network_large.generate_pcp_network()
 
-        small_scale_results = run_simulation(list_[i], network_small)
-        generate_individual_graphs(small_scale_results, graphs_dir, str(i)+"small_scale")
-        save_data_to_file(small_scale_results, os.path.join(data_dir, str(i)+"small_scale_results.json"))
+            small_scale_results = run_simulation(list_[i], network_small)
+            generate_individual_graphs(small_scale_results, graphs_dir, generate_file_name(i,"Small_Scale",""))
+            save_data_to_file(small_scale_results, os.path.join(data_dir, generate_file_name(i,"Small_Scale","json")))
 
-        large_scale_results = run_simulation(list_[i], network_large)
-        generate_individual_graphs(large_scale_results, graphs_dir, str(i)+"large_scale")
-        save_data_to_file(large_scale_results, os.path.join(data_dir, str(i)+"large_scale_results.json"))
+            mid_scale_results = run_simulation(list_[i], network_mid)
+            generate_individual_graphs(mid_scale_results, graphs_dir, generate_file_name(i,"mid_Scale",""))
+            save_data_to_file(mid_scale_results, os.path.join(data_dir, generate_file_name(i,"mid_Scale","json")))
 
+            large_scale_results = run_simulation(list_[i], network_large)
+            generate_individual_graphs(large_scale_results, graphs_dir,generate_file_name(i,"large_Scale",""))
+            save_data_to_file(large_scale_results, os.path.join(data_dir, generate_file_name(i,"large_Scale","json")))
 
-        print_percentages(small_scale_results,"Small_Scale", os.path.join(data_dir, str(i)+"Small_Scale.txt"))
-        print_percentages(large_scale_results,"large_Scale",os.path.join(data_dir, str(i)+"large_Scale.txt"))
+            # generate_file_name(i,"Small_Scale","txt")
+
+            print_percentages(small_scale_results,"Small_Scale", os.path.join(data_dir, generate_file_name(i,"Small_Scale","txt")))
+            print_percentages(large_scale_results,"large_Scale",os.path.join(data_dir, generate_file_name(i,"large_Scale","txt")))
+            print_percentages(mid_scale_results,"mid_Scale",os.path.join(data_dir, generate_file_name(i,"mid_Scale","txt")))
 
     
     end_execution_time = time.time()
@@ -1922,6 +1862,10 @@ def main():
 
 
    
+def generate_file_name(iteration_num, title, extension) -> str:
+    timestamp = time.strftime("%Y%m%d_%H%M%S")  # Format time to be filename-friendly
+    return f"{iteration_num}_{timestamp}_{title}.{extension}"
+
 
 def print_percentages(results, title, file):
     with open(file, "w") as f:
